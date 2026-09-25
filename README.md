@@ -1,17 +1,3 @@
-# minidb
-
-CS 4321/5321 Group 6 skeleton for a simple analytical database. The pieces compile and the command line starts. Query execution is intentionally unimplemented.
-
-Course constraints this layout follows:
-
-- The database is a directory of files on disk and does not change while the system runs.
-- Users type queries at a command line.
-- The query language is a subset of SQL over relational data.
-- There is no update path and no transaction path.
-- Rows are pulled one at a time so a later version can run on data larger than memory.
-
-Starting choices, all replaceable: Java, CSV files, integers and strings, then `SELECT` / `FROM` / `JOIN`. Add `WHERE`, `ORDER BY`, `GROUP BY`, more types, and subqueries only after that path works.
-
 ## Layout
 
 ```
@@ -29,7 +15,6 @@ src/main/java/minidb/
 data/                    put table files here; nothing is checked in
 ```
 
-Replace any class behind its interface. Do not add a library that already parses or runs SQL.
 
 ## Run
 
@@ -40,3 +25,5 @@ java -jar target/minidb-0.1.0.jar data
 ```
 
 The prompt accepts a line and exits on `quit`. Execution throws until `Parser` is filled in.
+
+Starting choices: Java, CSV files, integers and strings, then `SELECT` / `FROM` / `JOIN`. Add `WHERE`, `ORDER BY`, `GROUP BY`, more types, and subqueries only after that path works.

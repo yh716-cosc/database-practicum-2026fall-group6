@@ -26,7 +26,7 @@ public final class Engine {
 
     public Engine(Path dataDir) {
         this.catalog = new DirectoryCatalog(dataDir);
-        this.store = new DirectoryTableStore(dataDir);
+        this.store = new DirectoryTableStore(dataDir, catalog);
         this.parser = new SqlParser();
         this.planner = new Planner();
         this.executor = new Executor(store);

@@ -1,6 +1,6 @@
 # Query Filtering — Version 1 Design
 
-Status: Design draft; not implemented. New class names and interfaces in this document are proposed contracts.
+Status: Design draft with Java skeletons; query execution is not implemented. The conceptual names below describe responsibilities; the compact file layout in Section 10 maps them to the current skeletons.
 
 ## 1. Goals and Scope
 
@@ -291,3 +291,22 @@ Organize tests into parser, planner, expression evaluation/operator, and `Engine
 The Parser delivers `Query` / `Expression`. The Planner delivers a logical plan containing bound expressions. The Executor consumes that plan and `TableStore`. Once these interfaces are agreed upon, each component can be developed and tested independently.
 
 Future JOIN support can reuse comparison and logical expressions, but column binding must expand to handle aliases, ambiguous column names, and column positions after a join. ORDER BY and GROUP BY require separate designs and do not affect acceptance of this version.
+
+## 10. Compact Skeleton Layout
+
+Related expression and plan nodes are nested records to keep the initial file count small. Paths below are relative to `src/main/java/minidb/`.
+
+| File | Skeleton contents |
+| --- | --- |
+| `sql/ast/Expression.java` | IntLiteral, StringLiteral, ComparisonOp, Comparison, And, Or, Not, and Star |
+| `sql/ast/ColumnRef.java` | Existing column reference; retained as a separate record |
+| `plan/LogicalOperator.java` | Scan, Filter, and Project records |
+| `plan/BoundExpression.java` | Scalar and Predicate interfaces; Column, Literal, Comparison, And, Or, and Not records |
+| `exec/ExpressionEvaluator.java` | Implemented evaluate(Scalar, Row) and test(Predicate, Row), with unit tests |
+| `exec/TableScanOperator.java` | Constructor and open/next/close stubs |
+| `exec/FilterOperator.java` | Constructor accepting a child, bound predicate, and evaluator; lifecycle stubs |
+| `exec/ProjectOperator.java` | Constructor accepting a child and column indexes; lifecycle stubs |
+
+For this compact version, ExpressionEvaluator evaluates bound nodes directly instead of introducing separate ValueEvaluator, RowPredicate, and ExpressionCompiler files. The typing and comparison rules above still apply. Evaluation supports typed literals, bound columns, comparisons, and short-circuit boolean logic. The planner remains responsible for validating the entire expression before execution; runtime evaluation also rejects encountered mismatched comparison types and unsupported string operators. It assumes valid non-null Value payloads and correctly bound row layouts. Operator lifecycle methods still throw UnsupportedOperationException until implemented; constructors and records only hold the proposed structure.
+
+SqlParser, Planner, and Executor remain unimplemented. Their future integration points are Expression nodes, LogicalOperator nodes with BoundExpression predicates, and the three physical operators, respectively.

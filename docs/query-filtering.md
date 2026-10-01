@@ -6,21 +6,21 @@ Status: Design draft; not implemented. New class names and interfaces in this do
 
 Implement the complete single-table `SELECT / FROM / WHERE` pipeline: parse SQL, validate columns and types, scan data, filter rows, and return selected columns.
 
-Version 1 supports signed 32-bit integers only. This document calls the type `INT`; code and `.schema` files retain the existing names `DataType.INTEGER` and `INTEGER`, with Java `Integer` values.
+Version 1 supports signed 32-bit integers and strings, matching the existing storage types. This document calls the integer type `INT`; code and `.schema` files retain `DataType.INTEGER` / `INTEGER`, with Java `Integer` values. Strings use `DataType.STRING` / `STRING`, with Java `String` values.
 
 Supported features:
 
 - One base table, without table or column aliases.
 - `SELECT *` or an explicit column list, preserving selection order and allowing repeated columns.
 - An optional `WHERE` clause; omitting it returns all rows.
-- Integer literals, column references, and comparisons between columns.
-- Comparison operators: `=`, `<>`, `<`, `<=`, `>`, `>=`.
+- Integer and string literals, column references, and comparisons between columns of the same type.
+- Integer comparison operators: `=`, `<>`, `<`, `<=`, `>`, `>=`; string comparison operators: `=`, `<>`.
 - Boolean operators: `AND`, `OR`, `NOT`, and parentheses for grouping predicates.
 - Unqualified column names and names qualified by the actual table name, such as `age` and `students.age`.
 
-Deferred features: string queries, SQL `NULL`, arithmetic expressions, type conversion, JOIN, multiple FROM tables, ORDER BY, GROUP BY, aggregation, HAVING, DISTINCT, LIMIT, subqueries, indexes, and filter pushdown.
+Deferred features: string ordering comparisons, LIKE, SQL `NULL`, arithmetic expressions, type conversion, JOIN, multiple FROM tables, ORDER BY, GROUP BY, aggregation, HAVING, DISTINCT, LIMIT, subqueries, indexes, and filter pushdown.
 
-Existing storage support for `STRING` remains available. To make Version 1 behavior explicit, planning rejects a target table containing any non-`INTEGER` column, even if that column is not selected. A later version may relax this restriction.
+Tables may contain any mixture of `INTEGER` and `STRING` columns. Both types can be selected and filtered. Comparisons require matching operand types; Version 1 performs no implicit conversion between strings and integers.
 
 ## 2. Existing Code
 
@@ -29,7 +29,7 @@ Existing storage support for `STRING` remains available. To make Version 1 behav
 | `Engine` | Connects parse → plan → compile → execute | Review error paths and resource cleanup |
 | `SqlParser` | Not implemented | Implement the supported SQL subset |
 | `Query` | Contains select, from, joins, and where | Retain structure; null where means no filter |
-| `Expression` / `ColumnRef` | Expression interface and column references exist | Add integer, comparison, and logical expressions |
+| `Expression` / `ColumnRef` | Expression interface and column references exist | Add integer and string literals, comparison, and logical expressions |
 | `Planner` / `LogicalOperator` | Not implemented | Add column binding, type checking, and logical plans |
 | `Executor` / `Operator` | Compilation is not implemented; lifecycle interface exists | Add Scan, Filter, and Project |
 | `Catalog` / `TableStore` | Schema lookup and streaming scans exist | Reuse directly |
@@ -52,7 +52,7 @@ SQL → Parser → AST → Planner + Catalog → Logical Plan
 - `.schema` defines column names, order, and types. Version 1 does not infer schemas from CSV contents.
 - The SQL parser handles syntax. It does not read CSV data or determine whether a column exists.
 - The Planner resolves columns and checks types using the catalog without scanning data.
-- Storage converts CSV fields into integer rows according to the schema. Invalid integers, overflow, or malformed records fail the scan.
+- Storage converts CSV fields into typed rows according to the schema. INTEGER fields become integers; STRING fields preserve their text, including spaces, empty strings, and leading zeros. Invalid integers, overflow, or malformed records fail the scan.
 - Filter operates on typed rows. It does not parse CSV files or create tables.
 
 The team notes' “creating table based on data that is parsed” belongs to data preparation. Before a Version 1 query starts, the target table must have valid `.schema` and `.csv` files.
@@ -77,7 +77,7 @@ or_expr     := and_expr (OR and_expr)*
 and_expr    := not_expr (AND not_expr)*
 not_expr    := NOT not_expr | (predicate) | comparison
 comparison  := operand comparison_op operand
-operand     := column_ref | signed_integer
+operand     := column_ref | signed_integer | string_literal
 column_ref  := identifier [. identifier]
 comparison_op := = | <> | < | <= | > | >=
 ```
@@ -86,6 +86,8 @@ Rules:
 
 - Comparisons bind before `NOT`, followed by `AND`, then `OR`. Parentheses override default precedence.
 - Integer literals accept an optional sign and range from -2147483648 to 2147483647. Parse the complete signed value before checking its range so that the minimum integer is accepted.
+- String literals use single quotes. Two consecutive single quotes inside a literal represent one quote, as in `'O''Brien'`. Support empty strings (`''`) and Unicode text; preserve case and whitespace. Backslashes have no escape semantics. Reject unterminated literals; double quotes are not string delimiters in this subset.
+- SQL string quoting is separate from CSV quoting. The parser decodes SQL literals; storage handles CSV escaping. Neither layer applies the other layer's quoting rules.
 - Reject `WHERE age`, `age < 20 < 30`, and unconsumed trailing SQL.
 - `SELECT *` cannot be mixed with other selection items. `table.*` is unsupported.
 - Unsupported syntax must fail explicitly rather than being ignored during execution.
@@ -95,6 +97,7 @@ Proposed AST nodes:
 | Node | Contents |
 | --- | --- |
 | `IntLiteral` | `int value` |
+| `StringLiteral` | `String value` containing decoded, non-null text |
 | `Comparison` | `Expression left, ComparisonOp op, Expression right` |
 | `And` / `Or` | `Expression left, Expression right` |
 | `Not` | `Expression child` |
@@ -107,19 +110,19 @@ These nodes implement the existing `Expression` interface. Retain `ColumnRef`. `
 The Planner processes a query in this order:
 
 1. Validate that the query falls within the Version 1 scope.
-2. Call `Catalog.getTable(name)` to retrieve column definitions and verify that every column is `INTEGER`.
+2. Call `Catalog.getTable(name)` to retrieve column definitions and verify that each column is `INTEGER` or `STRING`.
 3. Map column names to positions matching the indexes in `Row.values()`.
 4. Bind WHERE column references, checking table qualifiers and unknown columns.
-5. Verify that comparison operands are integers and AND / OR / NOT operands are predicates.
+5. Verify that comparison operands have the same type, that the operator supports that type, and that AND / OR / NOT operands are predicates. Validate the entire expression, including branches that may be skipped at runtime.
 6. Bind SELECT columns; expand `*` into all columns in schema order.
 7. Produce the logical plan.
 
-Binding happens once; execution accesses rows directly by index. Represent bound integer expressions separately from bound predicates:
+Binding happens once; execution accesses rows directly by index. Represent typed scalar expressions separately from bound predicates:
 
 ```text
-BoundIntExpression
-  BoundIntLiteral(value)
-  BoundColumn(index)          // Version 1 validates all columns as INTEGER
+BoundValueExpression         // Exposes its DataType
+  BoundLiteral(value)        // Existing Value: INTEGER/Integer or STRING/String
+  BoundColumn(index, type)   // Type comes from the catalog
 
 BoundPredicate
   BoundComparison(left, op, right)
@@ -129,6 +132,16 @@ BoundPredicate
 ```
 
 Booleans are intermediate expression results. No BOOLEAN type needs to be added to storage's `DataType`.
+
+Comparison rules:
+
+| Operand types | Supported operators | Semantics |
+| --- | --- | --- |
+| INTEGER / INTEGER | `=`, `<>`, `<`, `<=`, `>`, `>=` | Signed numeric comparison |
+| STRING / STRING | `=`, `<>` | Exact, case-sensitive Java `String.equals` equality; no trimming, locale rules, or Unicode normalization |
+| INTEGER / STRING or STRING / INTEGER | None | Planning error; no implicit conversion |
+
+For example, `age = '18'` and `name > 'Alice'` fail during planning. `name = ''` is valid. The string `'NULL'` is ordinary text; unquoted SQL NULL is unsupported.
 
 Proposed logical nodes:
 
@@ -175,14 +188,15 @@ public Row next() {
 - Return the original row, preserving column layout, duplicate rows, and input order.
 - Evaluate AND / OR from left to right with short-circuiting; NOT negates its operand.
 - Use direct integer comparisons or `Integer.compare`. Avoid subtraction-based comparisons, which can overflow.
+- Compare strings with `String.equals`, never Java reference equality (`==`). Negate equality for `<>`; preserve whitespace and case.
 - SQL NULL is outside this version's scope, so predicates produce only true or false.
 - Filter holds only the current row and fixed expression state; it does not collect the complete result.
 
 Proposed runtime interfaces:
 
 ```java
-interface IntEvaluator {
-    int evaluate(Row row);
+interface ValueEvaluator {
+    Value evaluate(Row row);
 }
 
 interface RowPredicate {
@@ -190,7 +204,7 @@ interface RowPredicate {
 }
 ```
 
-The Executor compiles bound expressions into these evaluators. Execution performs no catalog lookup by column name.
+The Executor compiles bound expressions into these evaluators and selects integer or string comparison logic using the types checked during planning. Literals return a fixed typed Value; column evaluators return the Value at the bound index. Execution performs no catalog lookup by column name or string-to-integer coercion.
 
 ### ProjectOperator
 
@@ -207,8 +221,8 @@ Build an output `Row` from the bound column indexes, copying only references to 
 
 | Stage | Examples | Expected behavior |
 | --- | --- | --- |
-| Parse | Missing WHERE predicate, literal out of range, unsupported syntax | Report a parse error with a location or context |
-| Plan | Unknown column, incorrect table qualifier, table containing STRING | Fail before scanning; identify the object and reason |
+| Parse | Missing WHERE predicate, literal out of range, unterminated string, unsupported syntax | Report a parse error with a location or context |
+| Plan | Unknown column, incorrect table qualifier, mismatched operand types, unsupported operator for a type | Fail before scanning; identify the object and reason |
 | Plan | Manually constructed AST using JOIN, aliases, or a non-predicate WHERE | Reject explicitly without ignoring fields |
 | Execute / Storage | Invalid CSV integer, incorrect row width, I/O failure | Stop execution and close resources, retaining storage error context |
 
@@ -216,22 +230,24 @@ Introduce `SqlParseException` and `QueryPlanningException`; storage continues us
 
 ## 8. Acceptance Criteria
 
-Use an integer-only test table. The contents of `students.schema` are:
+Use a table containing both supported types. The contents of `students.schema` are:
 
 ```text
 id INTEGER
 age INTEGER
 score INTEGER
+name STRING
+nickname STRING
 ```
 
 The contents of `students.csv` are:
 
 ```csv
-id,age,score
-1,17,90
-2,18,85
-3,20,80
-4,21,95
+id,age,score,name,nickname
+1,17,90,Alice,Alice
+2,18,85,Bob,Bobby
+3,20,80,O'Brien,OB
+4,21,95,,
 ```
 
 | Query or scenario | Expected result |
@@ -244,12 +260,21 @@ id,age,score
 | `SELECT id, id FROM students WHERE id = 2` | One row: `[2, 2]` |
 | `SELECT * FROM students` | All columns and rows in input order |
 | `SELECT students.id FROM students WHERE students.age = 18` | ID 2 |
+| `SELECT name FROM students WHERE age >= 18 AND name <> ''` | Names `Bob` and `O'Brien` |
+| `SELECT id FROM students WHERE name = 'O''Brien'` | ID 3; verifies SQL quote escaping |
+| `SELECT id FROM students WHERE name = nickname` | IDs 1 and 4; verifies string column comparison |
+| `SELECT id FROM students WHERE name = ''` | ID 4; empty strings are valid values |
+| `SELECT id FROM students WHERE name = 'alice'` | Empty result; equality is case-sensitive |
+| `SELECT id FROM students WHERE age = '18'` | Planning error: INTEGER / STRING mismatch |
+| `SELECT id FROM students WHERE name > 'Alice'` | Planning error: ordering comparison is unsupported for STRING |
 
 Also cover:
 
 - Equality boundaries for all six comparison operators, negative values, and minimum/maximum integers; comparisons across integer extremes must not overflow.
 - Empty tables, all rows matching, no rows matching, duplicate rows, constant comparisons, and filtering by columns absent from the output.
-- Unknown columns, non-INTEGER tables, integer overflow, trailing SQL, and all explicitly excluded syntax.
+- String-only and mixed-type tables; exact equality and inequality for Unicode, leading/trailing spaces, leading zeros, empty strings, and the ordinary text `NULL`.
+- SQL strings containing commas, parentheses, or keywords; doubled quote decoding and unterminated literal errors. Include CSV values containing quotes or commas to verify that CSV and SQL escaping remain independent.
+- Unknown columns, mismatched comparison types (including column-to-column comparisons), unsupported string operators, integer overflow, trailing SQL, and all explicitly excluded syntax. Type errors must fail even for empty tables or branches skipped by short-circuit evaluation.
 - Planner rejection of invalid ASTs constructed directly.
 - A counting test child operator to verify that Filter reads on demand rather than consuming all rows in advance; AND / OR short-circuit behavior.
 - Resource cleanup on normal EOF, early close, next failure, and open failure.

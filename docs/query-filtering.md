@@ -303,10 +303,12 @@ Related expression and plan nodes are nested records to keep the initial file co
 | `plan/LogicalOperator.java` | Scan, Filter, and Project records |
 | `plan/BoundExpression.java` | Scalar and Predicate interfaces; Column, Literal, Comparison, And, Or, and Not records |
 | `exec/ExpressionEvaluator.java` | Implemented evaluate(Scalar, Row) and test(Predicate, Row), with unit tests |
-| `exec/TableScanOperator.java` | Constructor and open/next/close stubs |
+| `exec/TableScanOperator.java` | Implemented single-use streaming scan, EOF cleanup, and failure cleanup, with unit and CSV integration tests |
 | `exec/FilterOperator.java` | Constructor accepting a child, bound predicate, and evaluator; lifecycle stubs |
 | `exec/ProjectOperator.java` | Constructor accepting a child and column indexes; lifecycle stubs |
 
-For this compact version, ExpressionEvaluator evaluates bound nodes directly instead of introducing separate ValueEvaluator, RowPredicate, and ExpressionCompiler files. The typing and comparison rules above still apply. Evaluation supports typed literals, bound columns, comparisons, and short-circuit boolean logic. The planner remains responsible for validating the entire expression before execution; runtime evaluation also rejects encountered mismatched comparison types and unsupported string operators. It assumes valid non-null Value payloads and correctly bound row layouts. Operator lifecycle methods still throw UnsupportedOperationException until implemented; constructors and records only hold the proposed structure.
+For this compact version, ExpressionEvaluator evaluates bound nodes directly instead of introducing separate ValueEvaluator, RowPredicate, and ExpressionCompiler files. The typing and comparison rules above still apply. Evaluation supports typed literals, bound columns, comparisons, and short-circuit boolean logic. The planner remains responsible for validating the entire expression before execution; runtime evaluation also rejects encountered mismatched comparison types and unsupported string operators. It assumes valid non-null Value payloads and correctly bound row layouts. Filter and Project lifecycle methods still throw UnsupportedOperationException until implemented.
+
+TableScanOperator acquires its cursor on open and reads one row per next call. EOF closes the cursor; repeated next calls at EOF return null until explicit close. Explicit close is idempotent and prohibits further reads or reopening, including when called before open. Acquisition, open, and read failures leave the operator closed. Cleanup failures are suppressed on the original open/read exception. A close failure is reported once without retrying cleanup.
 
 SqlParser, Planner, and Executor remain unimplemented. Their future integration points are Expression nodes, LogicalOperator nodes with BoundExpression predicates, and the three physical operators, respectively.

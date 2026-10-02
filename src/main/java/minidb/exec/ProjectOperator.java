@@ -1,11 +1,17 @@
 package minidb.exec;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import minidb.storage.Row;
+import minidb.types.Value;
 
-/** Skeleton for selecting columns in order, including repeated selections. */
+/** Single-use projection that owns its child and preserves selection order. */
 public final class ProjectOperator implements Operator {
+    private enum State { NEW, OPEN, EOF, CLOSED }
+
+    private State state = State.NEW;
+    private boolean childCloseAttempted;
     private final Operator child;
     private final List<Integer> columnIndexes;
 
@@ -16,19 +22,60 @@ public final class ProjectOperator implements Operator {
 
     @Override
     public void open() {
-        // TODO: Open the child and enforce a single execution lifecycle.
-        throw new UnsupportedOperationException("Projection is not implemented");
+        if (state != State.NEW) {
+            throw new IllegalStateException("A projection can only be opened once");
+        }
+        try {
+            child.open();
+            state = State.OPEN;
+        } catch (RuntimeException failure) {
+            closeAfterFailure(failure);
+            throw failure;
+        }
     }
 
     @Override
     public Row next() {
-        // TODO: Read one child row and select values using columnIndexes.
-        throw new UnsupportedOperationException("Projection is not implemented");
+        if (state == State.EOF) {
+            return null;
+        }
+        if (state != State.OPEN) {
+            throw new IllegalStateException("Projection must be open before reading");
+        }
+        try {
+            Row input = child.next();
+            if (input == null) {
+                close();
+                state = State.EOF;
+                return null;
+            }
+            List<Value> selected = new ArrayList<>(columnIndexes.size());
+            for (int index : columnIndexes) {
+                selected.add(input.values().get(index));
+            }
+            return new Row(List.copyOf(selected));
+        } catch (RuntimeException failure) {
+            closeAfterFailure(failure);
+            throw failure;
+        }
     }
 
     @Override
     public void close() {
-        // TODO: Close the child; repeated close calls must be safe.
-        throw new UnsupportedOperationException("Projection is not implemented");
+        state = State.CLOSED;
+        if (!childCloseAttempted) {
+            childCloseAttempted = true;
+            child.close();
+        }
+    }
+
+    private void closeAfterFailure(RuntimeException failure) {
+        try {
+            close();
+        } catch (RuntimeException closeFailure) {
+            if (closeFailure != failure) {
+                failure.addSuppressed(closeFailure);
+            }
+        }
     }
 }

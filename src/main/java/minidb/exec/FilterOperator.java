@@ -3,8 +3,12 @@ package minidb.exec;
 import minidb.plan.BoundExpression;
 import minidb.storage.Row;
 
-/** Skeleton for streaming rows that satisfy a bound predicate. */
+/** A single-use streaming filter that owns its child operator. */
 public final class FilterOperator implements Operator {
+    private enum State { NEW, OPEN, EOF, CLOSED }
+
+    private State state = State.NEW;
+    private boolean childCloseAttempted;
     private final Operator child;
     private final BoundExpression.Predicate predicate;
     private final ExpressionEvaluator evaluator;
@@ -18,20 +22,59 @@ public final class FilterOperator implements Operator {
 
     @Override
     public void open() {
-        // TODO: Open the child and enforce a single execution lifecycle.
-        throw new UnsupportedOperationException("Filtering is not implemented");
+        if (state != State.NEW) {
+            throw new IllegalStateException("A filter can only be opened once");
+        }
+        try {
+            child.open();
+            state = State.OPEN;
+        } catch (RuntimeException failure) {
+            closeAfterFailure(failure);
+            throw failure;
+        }
     }
 
     @Override
     public Row next() {
-        // TODO: Pull rows until evaluator.test(predicate, row) succeeds or EOF.
-        // Return the original matching row without changing its column layout.
-        throw new UnsupportedOperationException("Filtering is not implemented");
+        if (state == State.EOF) {
+            return null;
+        }
+        if (state != State.OPEN) {
+            throw new IllegalStateException("Filter must be open before reading");
+        }
+        try {
+            Row row;
+            while ((row = child.next()) != null) {
+                if (evaluator.test(predicate, row)) {
+                    return row;
+                }
+            }
+            close();
+            state = State.EOF;
+            return null;
+        } catch (RuntimeException failure) {
+            closeAfterFailure(failure);
+            throw failure;
+        }
     }
 
     @Override
     public void close() {
-        // TODO: Close the child; repeated close calls must be safe.
-        throw new UnsupportedOperationException("Filtering is not implemented");
+        state = State.CLOSED;
+        if (!childCloseAttempted) {
+            // Mark first so a failed close is not retried by exception cleanup.
+            childCloseAttempted = true;
+            child.close();
+        }
+    }
+
+    private void closeAfterFailure(RuntimeException failure) {
+        try {
+            close();
+        } catch (RuntimeException closeFailure) {
+            if (closeFailure != failure) {
+                failure.addSuppressed(closeFailure);
+            }
+        }
     }
 }

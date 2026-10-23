@@ -10,6 +10,7 @@ import minidb.sql.ast.Query;
 import minidb.sql.ast.SelectItem;
 import minidb.sql.ast.Statement;
 import minidb.sql.ast.TableRef;
+import minidb.sql.ast.OrderBy;
 
 /**
  * Recursive-descent parser for one SELECT statement. Each {@code parse} call
@@ -45,13 +46,44 @@ public final class SqlParser implements Parser {
                 advance();
                 where = predicate();
             }
+            List<OrderBy> orderBy = new ArrayList<>();
+            if (word("order")) {
+                advance();
+                if (!word("by")) throw unexpected("BY");
+                advance();
+                do {
+                    ColumnRef column = columnRef("ORDER BY column");
+                    boolean ascending = true;
+                    if (word("asc") || word("desc")) {
+                        ascending = word("asc");
+                        advance();
+                    }
+                    orderBy.add(new OrderBy(column, ascending));
+                    if (current.kind() != Token.Kind.COMMA) break;
+                    advance();
+                } while (true);
+            }
+            Integer limit = null;
+            if (word("limit")) {
+                advance();
+                if (current.kind() != Token.Kind.INTEGER || current.intValue() < 0) {
+                    throw error("LIMIT requires a non-negative 32-bit integer");
+                }
+                limit = current.intValue();
+                advance();
+            }
             if (current.kind() == Token.Kind.SEMICOLON) {
                 advance();
             }
             if (current.kind() != Token.Kind.EOF) {
                 throw unexpected("end of input");
             }
-            return new Query(List.copyOf(select), List.of(table), List.of(), where);
+            return new Query(List.copyOf(select), List.of(table), List.of(), where,
+                    List.copyOf(orderBy), limit);
+        }
+
+        private boolean word(String text) {
+            return current.kind() == Token.Kind.IDENTIFIER && current.text().equalsIgnoreCase(text);
         }
 
         private List<SelectItem> selectList() {
@@ -101,7 +133,7 @@ public final class SqlParser implements Parser {
 
         private TableRef fromTable() {
             Token name = expectIdentifier("table name");
-            if (current.kind() == Token.Kind.IDENTIFIER) {
+            if (current.kind() == Token.Kind.IDENTIFIER && !word("order") && !word("limit")) {
                 String clause = clauseMessage(current.text());
                 throw error(clause != null ? clause : "table aliases are not supported");
             }

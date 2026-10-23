@@ -18,6 +18,9 @@ public final class ExpressionEvaluator {
     }
 
     public boolean test(BoundExpression.Predicate predicate, Row row) {
+        if (predicate instanceof BoundExpression.Constant constant) {
+            return constant.value();
+        }
         if (predicate instanceof BoundExpression.And and) {
             return test(and.left(), row) && test(and.right(), row);
         }

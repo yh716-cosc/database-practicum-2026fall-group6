@@ -12,6 +12,12 @@ public final class Executor {
 
     /** Builds a fresh operator tree without opening cursors or reading rows. */
     public Operator compile(LogicalOperator plan) {
+        if (plan instanceof LogicalOperator.Sort sort) {
+            return new SortOperator(compile(sort.child()), sort.keys());
+        }
+        if (plan instanceof LogicalOperator.Limit limit) {
+            return new LimitOperator(compile(limit.child()), limit.count());
+        }
         if (plan instanceof LogicalOperator.Scan scan) {
             return new TableScanOperator(store, scan.tableName());
         }

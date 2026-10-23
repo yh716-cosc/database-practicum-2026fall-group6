@@ -31,14 +31,16 @@ ID 4; and ID 6, respectively. The final semicolon is optional.
 Type `quit` or `exit` to leave. Multiline statements and multiple statements on
 one line are not supported by the CLI.
 
-Output currently displays Java values, for example:
+Output displays column names and cell values, for example:
 
 ```text
-[Value[type=INTEGER, raw=4]]
+id
+--
+4
 (1 rows)
 ```
 
-`raw` is the cell value. See [shared sample queries](local-test-data/README.md)
+Results include column names and raw cell values; empty strings display as `""`. See [shared sample queries](local-test-data/README.md)
 for additional inputs and expected results.
 
 ## Supported SQL
@@ -48,12 +50,14 @@ for additional inputs and expected results.
 - INTEGER comparisons: `=`, `<>`, `<`, `<=`, `>`, `>=`.
 - STRING comparisons: `=` and `<>`, with exact case-sensitive matching.
 - `NOT`, `AND`, `OR`, and parentheses. Precedence: comparison, NOT, AND, OR.
+- ORDER BY named INTEGER/STRING columns, multiple keys, ASC (default) or DESC.
+- LIMIT with a non-negative 32-bit integer; no OFFSET.
 - Bare column names or actual table qualifiers, such as `students.age`.
 - Case-insensitive SQL keywords; case-sensitive table and column names.
 - Signed 32-bit integers; single-quoted strings with doubled quote escaping.
 
 No implicit type conversion: `age = '18'` is a planning error.
-JOIN, aliases, multiple tables, ORDER BY, GROUP BY, aggregates, DISTINCT, LIMIT,
+JOIN, aliases, multiple tables, GROUP BY, aggregates, DISTINCT, OFFSET,
 LIKE, SQL NULL, arithmetic, comments, subqueries, and SQL writes are unsupported.
 `table.*` and mixing `*` with other selected columns are also unsupported.
 
@@ -104,8 +108,9 @@ SQL -> Parser -> AST -> Planner + Catalog -> Logical plan
 | --- | --- |
 | Parser | Tokenization, SELECT AST, precedence, syntax diagnostics |
 | Planner | Column binding, type checks, star expansion, logical plans |
+| Optimizer | Fold constants, simplify predicates, merge consecutive projections |
 | Executor | Convert plans into fresh operator trees without reading rows |
-| Operators | Streaming scan, short-circuit filtering, projection, cleanup |
+| Operators | Scan, filtering, stable in-memory sorting, streaming limit, projection, cleanup |
 | Storage | Schema/catalog lookup, CSV cursors, new-table writes via Java API |
 | Engine / CLI | Execute SQL, collect results, print rows, accept next query |
 
@@ -116,11 +121,11 @@ produce bytecode. Engine opens the root, pulls rows, and closes it.
 
 - Syntax and planning errors print a message and return to the prompt.
 - Missing files, bad headers, invalid CSV values, and I/O errors raise
-  `StorageException`, which currently exits the CLI. Fix the files and restart.
+  `StorageException`; the CLI displays the error and accepts the next query.
 - Scan/filter/project stream rows, but QueryResult collects all output in memory.
 - Parser nesting is limited to 128 combined parentheses/NOT levels. Planner
   predicate-tree depth is limited to 256, including long flat AND/OR chains.
-- Output has no formatted column headers. No optimizer, indexes, or transactions.
+- Output includes column headers. No cost-based optimizer, indexes, or transactions.
 
 If `java` or `mvn` is not recognized, check JDK/Maven installation and PATH.
 If the JAR is missing, run `mvn -q package`. If a table is missing, check the
@@ -136,7 +141,7 @@ mvn -q "-Dtest=PlannerTest,ExecutorTest,EngineTest,CliTest" test
 
 The latest verified suite on 2026-10-11 has 170 passing tests. Tests cover parsing,
 planning, operator lifecycle and cleanup, storage, full SQL results, and CLI
-recovery after syntax/planning errors. Tests create their own fixtures; shared
+recovery after syntax, planning, and storage errors. Tests create their own fixtures; shared
 samples are for manual verification.
 
 For a separate storage API demonstration (use a fresh output directory each time):
@@ -163,13 +168,14 @@ local-test-data/         shared manual-test table and expected results
 - [Project updates](CHANGELOG.md)
 - [Parser grammar and API](docs/parser.md)
 - [Planner and executor](docs/planner.md)
+- [ORDER BY and LIMIT implementation](docs/sort-limit.md)
 - [Filtering architecture and contracts](docs/query-filtering.md)
 - [Storage](docs/storage.md)
 
 ## Next work
 
-Improve result formatting and CLI handling of storage errors; consider streaming
-result output for large queries. Design JOIN, sorting, or aggregation according to
+Consider streaming
+result output for large queries. Design JOIN or aggregation according to
 course requirements before extending the current subset.
 
 ## Group

@@ -11,7 +11,8 @@ plan. It uses table metadata only; it never scans or evaluates data rows.
    AND/OR/NOT require predicates. Both boolean branches are validated, even when
    runtime evaluation could short-circuit one of them.
 4. Bind SELECT columns or expand star in schema order, retaining duplicates.
-5. Return `Project(Filter(Scan))`, omitting Filter when WHERE is absent.
+5. Bind ORDER BY keys against the original schema, then add Sort and Limit.
+6. Return `Project(Limit(Sort(Filter(Scan))))`, omitting absent clauses.
 
 For schema `id INTEGER, name STRING, age INTEGER`, the query
 `SELECT name FROM students WHERE age >= 18` becomes a projection of index 1 over
@@ -29,6 +30,6 @@ operator tree without opening a cursor. This is query-plan compilation, not Java
 source compilation with javac; it produces no Java source or bytecode.
 
 Engine opens the root, pulls rows with next(), collects the result, and closes the
-root. Operators stream their inputs, but QueryResult holds all output rows in
+root. Sort materializes its input; other operators stream. QueryResult holds output rows in
 memory. Engine and CLI tests now exercise actual query results. Planner tests
 validate logical plans, binding, types, unsupported ASTs, and depth handling.

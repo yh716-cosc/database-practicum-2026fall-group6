@@ -18,6 +18,18 @@ import minidb.sql.ast.TableRef;
 class SqlParserTest {
     private final SqlParser parser = new SqlParser();
 
+    @Test void parsesOrderingDirectionsAndLimitWithoutReservingColumnNames() {
+        Query query = parse("select name from students where age > 0 "
+                + "order by students.age desc, name asc, id limit 2;");
+        assertEquals(List.of(
+                new minidb.sql.ast.OrderBy(new ColumnRef("students", "age"), false),
+                new minidb.sql.ast.OrderBy(new ColumnRef(null, "name"), true),
+                new minidb.sql.ast.OrderBy(new ColumnRef(null, "id"), true)), query.orderBy());
+        assertEquals(2, query.limit());
+        assertEquals(new ColumnRef(null, "limit"), parse("SELECT limit FROM t LIMIT 0")
+                .select().get(0).expression());
+    }
+
     @Test
     void parsesTheFilteringExample() {
         Query query = parse("SELECT id, name FROM students WHERE age >= 18 AND name <> '';");
@@ -221,10 +233,10 @@ class SqlParserTest {
         assertRejects("SELECT a, * FROM t", "cannot be mixed");
         assertRejects("SELECT DISTINCT a FROM t", "DISTINCT is not supported");
         assertRejects("SELECT count(a) FROM t", "aggregates are not supported");
-        assertRejects("SELECT a FROM t ORDER BY a", "ORDER BY is not supported");
+        assertRejects("SELECT a FROM t ORDER a", "expected BY");
         assertRejects("SELECT a FROM t GROUP BY a", "GROUP BY is not supported");
         assertRejects("SELECT a FROM t HAVING a = 1", "HAVING is not supported");
-        assertRejects("SELECT a FROM t LIMIT 1", "LIMIT is not supported");
+        assertRejects("SELECT a FROM t LIMIT -1", "LIMIT requires");
         assertRejects("SELECT a FROM t WHERE name LIKE 'a'", "LIKE is not supported");
         assertRejects("SELECT a FROM t WHERE name = NULL", "SQL NULL is not supported");
         assertRejects("SELECT a FROM t WHERE a IS NULL", "SQL NULL is not supported");

@@ -42,7 +42,9 @@ query has no filter. The select, from, and join lists are immutable snapshots.
 ## Grammar
 
 ```text
-query         := SELECT select_list FROM identifier [WHERE predicate] [;] EOF
+query         := SELECT select_list FROM identifier [WHERE predicate]
+                 [ORDER BY sort_key (, sort_key)*] [LIMIT unsigned_integer] [;] EOF
+sort_key      := column_ref [ASC | DESC]
 select_list   := * | column_ref (, column_ref)*
 predicate     := or_expr
 or_expr       := and_expr (OR and_expr)*
@@ -66,7 +68,7 @@ is preserved. Unqualified columns use a null table in `ColumnRef`.
 - Identifiers match storage's `[A-Za-z_][A-Za-z0-9_]*`. `SELECT`, `FROM`,
   `WHERE`, `AND`, `OR`, and `NOT` are reserved. Unquoted `NULL` is rejected.
   A name such as `order` or `join` can still be a column or table; `ORDER BY`
-  and `JOIN` cannot.
+  is supported; `JOIN` is not.
 - Integers are signed 32-bit values, including `-2147483648`. A sign must sit
   directly against the digits. Leading zeros are accepted and use the numeric
   value, so `007` is 7. Overflow is a parse error.
@@ -107,8 +109,8 @@ offset is not printed in the message. A tab counts as one column. Line breaks ar
 `\r\n`, or a bare `\r`.
 
 Rejected forms include JOIN, aliases, more than one table, `table.*`, `*` mixed
-with other select items, `ORDER BY`, `GROUP BY`, `HAVING`, `DISTINCT`,
-aggregates, `LIMIT`, `LIKE`, unquoted SQL `NULL`, quoted identifiers, comments,
+with other select items, `GROUP BY`, `HAVING`, `DISTINCT`,
+aggregates, `OFFSET`, `LIKE`, unquoted SQL `NULL`, quoted identifiers, comments,
 arithmetic, subqueries, updates, chained comparisons such as `age < 20 < 30`,
 and a second statement after the semicolon.
 
@@ -125,7 +127,7 @@ does not terminate the CLI. Separate sibling predicates do not accumulate levels
 - Operators evaluate BoundExpression nodes produced by Planner. Both layers share
   ComparisonOp: EQ, NE, LT, LE, GT, and GE.
 - The CLI prints SqlParseException and PlanningException and reads the next line.
-  StorageException still propagates. Type quit or exit to leave.
+  StorageException is also displayed and the session continues. Type quit or exit to leave.
 - Parser nesting limits and Planner tree-depth limits are separate; see
   [planner.md](planner.md) for the latter.
 

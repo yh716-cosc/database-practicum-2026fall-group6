@@ -14,7 +14,7 @@ import java.util.Map;
 public final class Planner {
     /**
      * Resolves table/column names and checks types using catalog metadata, then
-     * returns Project(Filter(Scan)), or Project(Scan) when WHERE is absent.
+     * returns Project(Limit(Sort(Filter(Scan)))), omitting optional clauses.
      * Column indexes always refer to the original schema until projection.
      * This method does not open a data cursor or evaluate any rows.
      */
@@ -46,6 +46,17 @@ public final class Planner {
         Binding binding = new Binding(from.name(), table);
         LogicalOperator child = new LogicalOperator.Scan(from.name());
         if (query.where() != null) child = new LogicalOperator.Filter(child, binding.predicate(query.where(), 0));
+        if (query.orderBy() == null) throw new PlanningException("ORDER BY list is required");
+        List<LogicalOperator.SortKey> keys = new ArrayList<>();
+        for (OrderBy key : query.orderBy()) {
+            if (key == null || key.column() == null) throw new PlanningException("Invalid ORDER BY key");
+            keys.add(new LogicalOperator.SortKey(binding.column(key.column()).index(), key.ascending()));
+        }
+        if (!keys.isEmpty()) child = new LogicalOperator.Sort(child, keys);
+        if (query.limit() != null) {
+            if (query.limit() < 0) throw new PlanningException("LIMIT must be non-negative");
+            child = new LogicalOperator.Limit(child, query.limit());
+        }
         List<Integer> indexes = new ArrayList<>();
         for (SelectItem item : query.select()) {
             if (item.expression() instanceof Expression.Star) {

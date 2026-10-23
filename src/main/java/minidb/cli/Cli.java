@@ -7,6 +7,7 @@ import minidb.Engine;
 import minidb.exec.QueryResult;
 import minidb.sql.SqlParseException;
 import minidb.plan.PlanningException;
+import minidb.storage.StorageException;
 
 /** Reads one SQL statement per line. The database stays read-only. */
 public final class Cli {
@@ -42,7 +43,7 @@ public final class Cli {
             try {
                 QueryResult result = engine.execute(line);
                 result.printTo(output);
-            } catch (SqlParseException | PlanningException ex) {
+            } catch (SqlParseException | PlanningException | StorageException ex) {
                 output.println(ex.getMessage());
             } catch (UnsupportedOperationException ex) {
                 output.println(ex.getMessage());

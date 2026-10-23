@@ -321,17 +321,17 @@ public final class SqlParser implements Parser {
         };
     }
 
-    /** Message for a clause word, or null when the spelling can be a normal name. */
+    /** Diagnostic for unsupported syntax; supported clauses are parsed by query(). */
     private static String clauseMessage(String text) {
         return switch (text.toLowerCase(Locale.ROOT)) {
             case "as" -> "aliases are not supported";
             case "join", "inner", "left", "right", "full", "cross", "outer", "natural", "on", "using" ->
                     "JOIN is not supported";
-            case "order" -> "ORDER BY is not supported";
             case "group" -> "GROUP BY is not supported";
             case "having" -> "HAVING is not supported";
             case "distinct" -> "DISTINCT is not supported";
-            case "limit", "offset", "fetch" -> "LIMIT is not supported";
+            case "offset" -> "OFFSET is not supported";
+            case "fetch" -> "FETCH is not supported";
             case "like" -> "LIKE is not supported";
             case "is" -> "SQL NULL is not supported";
             case "in", "between", "exists", "case", "cast" -> "unsupported expression";

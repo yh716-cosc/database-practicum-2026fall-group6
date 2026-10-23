@@ -237,6 +237,10 @@ class SqlParserTest {
         assertRejects("SELECT a FROM t GROUP BY a", "GROUP BY is not supported");
         assertRejects("SELECT a FROM t HAVING a = 1", "HAVING is not supported");
         assertRejects("SELECT a FROM t LIMIT -1", "LIMIT requires");
+        assertRejects("SELECT a FROM t LIMIT 1 OFFSET 1", "OFFSET is not supported");
+        assertRejects("SELECT a FROM t FETCH FIRST 1 ROWS ONLY", "FETCH is not supported");
+        assertRejects("SELECT a FROM t LIMIT 1 ORDER BY a", "expected end of input");
+        assertRejects("SELECT a FROM t LIMIT 1 LIMIT 2", "expected end of input");
         assertRejects("SELECT a FROM t WHERE name LIKE 'a'", "LIKE is not supported");
         assertRejects("SELECT a FROM t WHERE name = NULL", "SQL NULL is not supported");
         assertRejects("SELECT a FROM t WHERE a IS NULL", "SQL NULL is not supported");

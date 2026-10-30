@@ -221,7 +221,10 @@ class SqlParserTest {
 
     @Test
     void rejectsExcludedSyntax() {
-        assertRejects("SELECT a FROM t FULL JOIN u ON a = b", "JOIN is not supported");
+        assertRejects("SELECT a FROM t FULL JOIN u ON a = b", "FULL, CROSS, and NATURAL JOIN are not supported");
+        assertRejects("SELECT a FROM t CROSS JOIN u", "FULL, CROSS, and NATURAL JOIN are not supported");
+        assertRejects("SELECT a FROM t NATURAL JOIN u", "FULL, CROSS, and NATURAL JOIN are not supported");
+        assertRejects("SELECT a FROM t JOIN u USING (a)", "JOIN USING is not supported");
         assertRejects("SELECT a FROM t, u", "multiple tables are not supported");
         assertRejects("SELECT a FROM t FROM u", "multiple tables are not supported");
         assertRejects("SELECT a AS b FROM t", "aliases are not supported");

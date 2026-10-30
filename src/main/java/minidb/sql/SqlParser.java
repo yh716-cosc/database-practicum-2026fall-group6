@@ -349,19 +349,21 @@ public final class SqlParser implements Parser {
         };
     }
 
-    /** Diagnostic for unsupported syntax; supported clauses are parsed by query(). */
+    /** Diagnostics and clause boundaries; supported keywords here are misplaced, not unsupported. */
     private static String clauseMessage(String text) {
         return switch (text.toLowerCase(Locale.ROOT)) {
-            case "as" -> "aliases are not supported";
-            case "join", "inner", "left", "right", "full", "cross", "outer", "natural", "on", "using" ->
-                    "JOIN is not supported";
+            case "as" -> "column aliases are not supported";
+            case "full", "cross", "natural" -> "FULL, CROSS, and NATURAL JOIN are not supported";
+            case "using" -> "JOIN USING is not supported; use ON";
+            case "join", "inner", "left", "right", "outer", "on" ->
+                    "unexpected JOIN keyword; expected a two-table INNER/LEFT/RIGHT JOIN with ON";
             case "group" -> "GROUP BY is not supported";
             case "having" -> "HAVING is not supported";
             case "distinct" -> "DISTINCT is not supported";
             case "offset" -> "OFFSET is not supported";
             case "fetch" -> "FETCH is not supported";
             case "like" -> "LIKE is not supported";
-            case "is" -> "SQL NULL is not supported";
+            case "is" -> "unexpected IS; expected operand IS [NOT] NULL";
             case "in", "between", "exists", "case", "cast" -> "unsupported expression";
             case "union", "except", "intersect" -> "set operations are not supported";
             case "insert", "update", "delete", "create", "drop", "alter", "into", "values", "set" ->

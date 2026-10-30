@@ -69,9 +69,9 @@ is preserved. Unqualified columns use a null table in `ColumnRef`.
 ## Literals, names, and whitespace
 
 - Identifiers match storage's `[A-Za-z_][A-Za-z0-9_]*`. `SELECT`, `FROM`,
-  `WHERE`, `AND`, `OR`, and `NOT` are reserved. Unquoted `NULL` is rejected.
+  `WHERE`, `AND`, `OR`, and `NOT` are reserved. Unquoted `NULL` is accepted only in `IS [NOT] NULL`.
   A name such as `order` or `join` can still be a column or table; `ORDER BY`
-  is supported; `JOIN` is not.
+  and two-table INNER/LEFT/RIGHT JOIN are supported.
 - Integers are signed 32-bit values, including `-2147483648`. A sign must sit
   directly against the digits. Leading zeros are accepted and use the numeric
   value, so `007` is 7. Overflow is a parse error.
@@ -111,7 +111,7 @@ message describes the error and includes a 1-based line and column. The exceptio
 offset is not printed in the message. A tab counts as one column. Line breaks are `\n`,
 `\r\n`, or a bare `\r`.
 
-Rejected forms include FULL/multiway joins, column aliases, comma joins, `table.*`, `*` mixed
+Rejected forms include FULL/CROSS/NATURAL/multiway joins, JOIN USING, column aliases, comma joins, `table.*`, `*` mixed
 with other select items, `GROUP BY`, `HAVING`, `DISTINCT`,
 aggregates, `OFFSET`, `LIKE`, standalone `NULL` literals, quoted identifiers, comments,
 arithmetic, subqueries, updates, chained comparisons such as `age < 20 < 30`,

@@ -58,8 +58,10 @@ Value.raw may be null in query results; its DataType remains INTEGER or STRING.
 Comparison with NULL yields UNKNOWN, including NULL = NULL. AND/OR/NOT follow
 SQL three-valued logic. WHERE and ON pass only TRUE. IS NULL and IS NOT NULL
 always produce TRUE or FALSE. Standalone NULL literals remain unsupported.
-NULL values print as NULL and sort last for ASC, first for DESC. CSV files still
-have no NULL representation: an empty STRING field is an empty string, not NULL.
+NULL values print as NULL and sort last for ASC, first for DESC. Literal STRING
+NULL prints as 'NULL'; strings starting with a quote are also quoted and escaped.
+Versioned nullable CSV files encode NULL as \N; legacy CSV files retain their
+original behavior. An empty STRING field remains an empty string, not NULL.
 
 ```sql
 SELECT s.name

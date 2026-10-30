@@ -27,4 +27,12 @@ class QueryResultTest {
     @Test void printsHeadersForEmptyResult() {
         assertEquals("id\n--\n(0 rows)\n", print(new QueryResult(List.of("id"))));
     }
+
+    @Test void distinguishesNullFromLiteralNullAndQuotedText() {
+        QueryResult result = new QueryResult(List.of("text"));
+        result.add(new Row(List.of(Value.nullValue(DataType.STRING))));
+        result.add(new Row(List.of(new Value(DataType.STRING, "NULL"))));
+        result.add(new Row(List.of(new Value(DataType.STRING, "'NULL'"))));
+        assertEquals("text\n----\nNULL\n'NULL'\n'''NULL'''\n(3 rows)\n", print(result));
+    }
 }

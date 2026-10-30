@@ -211,7 +211,6 @@ public final class SqlParser implements Parser {
         private Expression comparison() {
             Expression left = operand();
             if (word("is")) {
-            if (current.kind() == Token.Kind.IDENTIFIER && current.text().equalsIgnoreCase("is")) {
                 advance();
                 boolean negated = current.kind() == Token.Kind.NOT;
                 if (negated) advance();

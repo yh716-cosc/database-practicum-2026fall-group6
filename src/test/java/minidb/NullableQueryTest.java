@@ -67,7 +67,8 @@ class NullableQueryTest {
     @Test void printsNullDistinctlyFromLiteralNullAndKeepsValidation() {
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
         engine.execute("SELECT name FROM people").printTo(new PrintStream(bytes, true, StandardCharsets.UTF_8));
-        assertEquals("'NULL'\nNULL\n''\n'\\N'\n(4 rows)\n", bytes.toString(StandardCharsets.UTF_8));
+        assertEquals("name\n----\n'NULL'\nNULL\n\"\"\n\\\\N\n(4 rows)\n",
+                bytes.toString(StandardCharsets.UTF_8).replace("\r\n", "\n"));
         assertThrows(PlanningException.class, () -> ids("missing IS NULL"));
         assertThrows(PlanningException.class, () -> ids("age = '20'"));
         assertThrows(SqlParseException.class, () -> ids("age = NULL"));

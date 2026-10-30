@@ -3,7 +3,6 @@ package minidb.exec;
 import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
 
 import minidb.storage.Row;
 import minidb.types.DataType;
@@ -41,9 +40,21 @@ public final class QueryResult {
         }
         for (Row row : rows) {
             out.println(String.join(" | ", row.values().stream()
-                    .map(value -> value.isNull() ? "NULL" : display(String.valueOf(value.raw()))).toList()));
+                    .map(QueryResult::formatValue).toList()));
         }
         out.println("(" + rows.size() + " rows)");
+    }
+
+    private static String formatValue(Value value) {
+        if (value.isNull()) return "NULL";
+        // Quote text that could be confused with NULL or with an already quoted string.
+        if (value.type() == DataType.STRING) {
+            String text = (String) value.raw();
+            if (text.equals("NULL") || text.startsWith("'")) {
+                return "'" + display(text.replace("'", "''")) + "'";
+            }
+        }
+        return display(String.valueOf(value.raw()));
     }
 
     /** Keep one physical line per row and make empty strings visible. */

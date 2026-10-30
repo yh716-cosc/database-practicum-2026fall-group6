@@ -28,10 +28,6 @@ public final class ExpressionEvaluator {
         }
         if (predicate instanceof BoundExpression.Constant constant) {
             return TruthValue.of(constant.value());
-    public TruthValue truth(BoundExpression.Predicate predicate, Row row) {
-        if (predicate instanceof BoundExpression.IsNull check) {
-            boolean isNull = evaluate(check.operand(), row).isNull();
-            return TruthValue.of(check.negated() ? !isNull : isNull);
         }
         if (predicate instanceof BoundExpression.And and) {
             TruthValue left = truth(and.left(), row);

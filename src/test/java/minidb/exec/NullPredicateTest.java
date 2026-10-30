@@ -38,13 +38,8 @@ class NullPredicateTest {
         assertEquals(check, ((LogicalOperator.Filter) new Optimizer().optimize(
                 new LogicalOperator.Filter(new LogicalOperator.Scan("t"), check))).predicate());
 
-import org.junit.jupiter.api.Test;
-import minidb.plan.BoundExpression;
-import minidb.sql.ast.Expression.ComparisonOp;
-import minidb.types.DataType;
-import minidb.types.Value;
+    }
 
-class NullPredicateTest {
     @Test void evaluatesEveryThreeValuedBooleanCombination() {
         TruthValue t = TruthValue.TRUE, f = TruthValue.FALSE, u = TruthValue.UNKNOWN;
         TruthValue[] values = {t, f, u};

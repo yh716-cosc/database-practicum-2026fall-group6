@@ -5,6 +5,22 @@ import java.util.List;
 /** Logical steps produced by the planner and compiled by the executor. */
 public interface LogicalOperator {
     record Scan(String tableName) implements LogicalOperator {}
+    record Join(LogicalOperator left, LogicalOperator right, BoundExpression.Predicate condition,
+                minidb.sql.ast.Join.Type type, List<minidb.types.DataType> leftTypes,
+                List<minidb.types.DataType> rightTypes) implements LogicalOperator {
+        public Join {
+            java.util.Objects.requireNonNull(type);
+            leftTypes = List.copyOf(leftTypes);
+            rightTypes = List.copyOf(rightTypes);
+            if ((type == minidb.sql.ast.Join.Type.LEFT && rightTypes.isEmpty())
+                    || (type == minidb.sql.ast.Join.Type.RIGHT && leftTypes.isEmpty())) {
+                throw new IllegalArgumentException("Outer join requires the nullable input's column types");
+            }
+        }
+        public Join(LogicalOperator left, LogicalOperator right, BoundExpression.Predicate condition) {
+            this(left, right, condition, minidb.sql.ast.Join.Type.INNER, List.of(), List.of());
+        }
+    }
 
     record SortKey(int index, boolean ascending) {}
 

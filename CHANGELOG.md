@@ -1,5 +1,23 @@
 # Project updates
 
+## LEFT and RIGHT JOIN extension
+
+- Parse LEFT/RIGHT JOIN with optional OUTER and preserve the logical column layout.
+- Extend the tuple nested-loop operator to null-extend unmatched preserved rows.
+- Execute RIGHT joins with swapped physical inputs, without rebinding logical indexes.
+- Add typed query NULLs, SQL three-valued predicates, IS NULL/IS NOT NULL, NULL sorting and display.
+- Keep CSV storage unchanged and keep standalone NULL literals unsupported.
+- Add outer-join, null-logic, failure, and lifecycle regression tests.
+
+## 2026-10-29 — Two-table INNER JOIN
+
+- Add table aliases and a single two-table column-equality INNER JOIN.
+- Bind qualified and unqualified names against the combined schema; reject ambiguity.
+- Execute streaming tuple nested-loop joins using fresh right subtrees per left row.
+- Preserve duplicate matches, output labels, filtering, sorting, and limits.
+- Add integration and lifecycle tests covering EOF, early close, failures, and cleanup.
+- See docs/join.md for supported syntax, performance, and error visibility.
+
 ## 2026-10-23 — ORDER BY and LIMIT
 
 - Parse optional ORDER BY column lists with ASC/DESC and non-negative LIMIT.

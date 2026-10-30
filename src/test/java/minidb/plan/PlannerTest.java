@@ -89,7 +89,7 @@ class PlannerTest {
         List<Query> invalid = List.of(
             new Query(select, List.of(), List.of(), null),
             new Query(select, List.of(from.get(0), from.get(0)), List.of(), null),
-            new Query(select, List.of(new TableRef("students", "s")), List.of(), null),
+            new Query(select, List.of(new TableRef("students", "")), List.of(), null),
             new Query(select, from, List.of(new Join(from.get(0), null)), null),
             new Query(List.of(), from, List.of(), null),
             new Query(List.of(select.get(0), select.get(0)), from, List.of(), null),

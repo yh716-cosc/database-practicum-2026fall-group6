@@ -4,8 +4,9 @@ This component turns one SQL statement into a `Query` tree. It checks syntax onl
 Table lookup, column binding, operand types, and row evaluation belong to the
 planner and executor. The parser does not read `.csv` or `.schema` files.
 
-Version 1 accepts one `SELECT` over one unaliased table, with an optional `WHERE`
-and an optional final semicolon. The statement must consume the whole string.
+The parser accepts one `SELECT` over one table or a two-table INNER/LEFT/RIGHT JOIN,
+with table aliases, optional WHERE/ORDER BY/LIMIT, and an optional final semicolon.
+See [JOIN syntax and semantics](join.md). The statement must consume the whole string.
 `docs/query-filtering.md` describes the larger single-table pipeline; this guide
 covers the parser that is implemented now.
 
@@ -36,21 +37,23 @@ Query
             Comparison(ColumnRef(null, "name"), NE, StringLiteral(""))
 ```
 
-Select-item aliases and the table alias are null. `where` is null when the
+Select-item aliases are null; table aliases are optional. `where` is null when the
 query has no filter. The select, from, and join lists are immutable snapshots.
 
 ## Grammar
 
 ```text
-query         := SELECT select_list FROM identifier [WHERE predicate]
+query         := SELECT select_list FROM table_ref [join_clause] [WHERE predicate]
                  [ORDER BY sort_key (, sort_key)*] [LIMIT unsigned_integer] [;] EOF
+table_ref     := identifier [[AS] identifier]
+join_clause   := [INNER | LEFT [OUTER] | RIGHT [OUTER]] JOIN table_ref ON predicate
 sort_key      := column_ref [ASC | DESC]
 select_list   := * | column_ref (, column_ref)*
 predicate     := or_expr
 or_expr       := and_expr (OR and_expr)*
 and_expr      := not_expr (AND not_expr)*
 not_expr      := NOT not_expr | '(' predicate ')' | comparison
-comparison    := operand comparison_op operand
+comparison    := operand (comparison_op operand | IS [NOT] NULL)
 operand       := column_ref | signed_integer | string_literal
 column_ref    := identifier ['.' identifier]
 comparison_op := '=' | '<>' | '<' | '<=' | '>' | '>='
@@ -108,9 +111,9 @@ message describes the error and includes a 1-based line and column. The exceptio
 offset is not printed in the message. A tab counts as one column. Line breaks are `\n`,
 `\r\n`, or a bare `\r`.
 
-Rejected forms include JOIN, aliases, more than one table, `table.*`, `*` mixed
+Rejected forms include FULL/multiway joins, column aliases, comma joins, `table.*`, `*` mixed
 with other select items, `GROUP BY`, `HAVING`, `DISTINCT`,
-aggregates, `OFFSET`, `LIKE`, unquoted SQL `NULL`, quoted identifiers, comments,
+aggregates, `OFFSET`, `LIKE`, standalone `NULL` literals, quoted identifiers, comments,
 arithmetic, subqueries, updates, chained comparisons such as `age < 20 < 30`,
 and a second statement after the semicolon.
 
@@ -122,7 +125,7 @@ does not terminate the CLI. Separate sibling predicates do not accumulate levels
 ## Team integration
 
 - Engine.execute parses, plans, compiles an operator tree, and collects query results.
-- Planner validates the single-table subset, binds names, checks types, and expands
+- Planner validates the single-table/two-table INNER/LEFT/RIGHT equijoin subset, binds names, checks types, and expands
   star in schema order. String ordering can parse but fails planning.
 - Operators evaluate BoundExpression nodes produced by Planner. Both layers share
   ComparisonOp: EQ, NE, LT, LE, GT, and GE.

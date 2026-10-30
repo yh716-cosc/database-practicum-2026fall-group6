@@ -35,7 +35,10 @@ public final class SortOperator extends UnaryOperator {
             Value b = right.values().get(key.index());
             if (a.type() != b.type()) throw new IllegalArgumentException("Sort key types differ");
             int order;
-            if (a.type() == DataType.INTEGER) {
+            // Explicit policy: NULLS LAST for ASC, NULLS FIRST for DESC.
+            if (a.isNull() || b.isNull()) {
+                order = a.isNull() ? (b.isNull() ? 0 : 1) : -1;
+            } else if (a.type() == DataType.INTEGER) {
                 order = Integer.compare((Integer) a.raw(), (Integer) b.raw());
             } else if (a.type() == DataType.STRING) {
                 order = ((String) a.raw()).compareTo((String) b.raw());

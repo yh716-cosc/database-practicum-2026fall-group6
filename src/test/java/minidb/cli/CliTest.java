@@ -94,7 +94,7 @@ class CliTest {
         String text = buffer.toString(StandardCharsets.UTF_8);
         int parseError = text.indexOf("expected column name");
         int queryResult = text.indexOf("(1 rows)");
-        int joinError = text.indexOf("JOIN is not supported");
+        int joinError = text.indexOf("expected ON");
         assertTrue(parseError >= 0, text);
         assertTrue(queryResult > parseError, text);
         assertTrue(joinError > queryResult, text);

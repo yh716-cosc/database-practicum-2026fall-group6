@@ -11,6 +11,7 @@ import minidb.sql.ast.SelectItem;
 import minidb.sql.ast.Statement;
 import minidb.sql.ast.TableRef;
 import minidb.sql.ast.OrderBy;
+import minidb.sql.ast.Join;
 
 /**
  * Recursive-descent parser for one SELECT statement. Each {@code parse} call
@@ -41,6 +42,21 @@ public final class SqlParser implements Parser {
             List<SelectItem> select = selectList();
             expect(Token.Kind.FROM, "FROM");
             TableRef table = fromTable();
+            List<Join> joins = new ArrayList<>();
+            if (word("inner") || word("join") || word("left") || word("right")) {
+                Join.Type type = word("left") ? Join.Type.LEFT : word("right") ? Join.Type.RIGHT : Join.Type.INNER;
+                if (!word("join")) advance();
+                if (type != Join.Type.INNER && word("outer")) advance();
+                if (!word("join")) throw unexpected("JOIN");
+                advance();
+                TableRef right = fromTable();
+                if (!word("on")) throw unexpected("ON");
+                advance();
+                joins.add(new Join(right, predicate(), type));
+            }
+            if (word("join") || word("inner") || word("left") || word("right")) {
+                throw error("Only two-table JOIN is supported");
+            }
             Expression where = null;
             if (current.kind() == Token.Kind.WHERE) {
                 advance();
@@ -78,7 +94,7 @@ public final class SqlParser implements Parser {
             if (current.kind() != Token.Kind.EOF) {
                 throw unexpected("end of input");
             }
-            return new Query(List.copyOf(select), List.of(table), List.of(), where,
+            return new Query(List.copyOf(select), List.of(table), List.copyOf(joins), where,
                     List.copyOf(orderBy), limit);
         }
 
@@ -133,14 +149,19 @@ public final class SqlParser implements Parser {
 
         private TableRef fromTable() {
             Token name = expectIdentifier("table name");
-            if (current.kind() == Token.Kind.IDENTIFIER && !word("order") && !word("limit")) {
-                String clause = clauseMessage(current.text());
-                throw error(clause != null ? clause : "table aliases are not supported");
+            String alias = null;
+            if (word("as")) {
+                advance();
+                alias = expectIdentifier("table alias").text();
+            } else if (current.kind() == Token.Kind.IDENTIFIER && !word("order") && !word("limit")
+                    && clauseMessage(current.text()) == null) {
+                alias = current.text();
+                advance();
             }
             if (current.kind() == Token.Kind.COMMA || current.kind() == Token.Kind.FROM) {
                 throw error("multiple tables are not supported");
             }
-            return new TableRef(name.text(), null);
+            return new TableRef(name.text(), alias);
         }
 
         private Expression predicate() {
@@ -189,6 +210,13 @@ public final class SqlParser implements Parser {
 
         private Expression comparison() {
             Expression left = operand();
+            if (word("is")) {
+                advance();
+                boolean negated = current.kind() == Token.Kind.NOT;
+                if (negated) advance();
+                expect(Token.Kind.NULL, "NULL");
+                return new Expression.IsNull(left, negated);
+            }
             Expression.ComparisonOp op = comparisonOp(current.kind());
             if (op == null) {
                 throw unexpected("comparison operator");

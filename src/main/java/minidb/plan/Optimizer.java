@@ -7,6 +7,10 @@ import minidb.plan.BoundExpression.*;
 /** Pure rule-based rewrites of fully bound, type-checked plans. No storage reads. */
 public final class Optimizer {
     public LogicalOperator optimize(LogicalOperator plan) {
+        if (plan instanceof LogicalOperator.Join join) {
+            return new LogicalOperator.Join(optimize(join.left()), optimize(join.right()), join.condition(),
+                    join.type(), join.leftTypes(), join.rightTypes());
+        }
         if (plan instanceof LogicalOperator.Limit limit) {
             LogicalOperator child = optimize(limit.child());
             if (child instanceof LogicalOperator.Limit inner) {
@@ -46,11 +50,13 @@ public final class Optimizer {
     }
 
     private Predicate simplify(Predicate predicate) {
+        if (predicate instanceof IsNull) return predicate;
         if (predicate instanceof Constant) {
             return predicate;
         }
         if (predicate instanceof Comparison comparison) {
-            if (comparison.left() instanceof Literal && comparison.right() instanceof Literal) {
+            if (comparison.left() instanceof Literal left && comparison.right() instanceof Literal right
+                    && !left.value().isNull() && !right.value().isNull()) {
                 return new Constant(new ExpressionEvaluator().test(comparison, null));
             }
             return predicate;

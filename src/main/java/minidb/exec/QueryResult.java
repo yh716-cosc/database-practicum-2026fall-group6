@@ -38,7 +38,7 @@ public final class QueryResult {
         }
         for (Row row : rows) {
             out.println(String.join(" | ", row.values().stream()
-                    .map(value -> display(String.valueOf(value.raw()))).toList()));
+                    .map(value -> value.isNull() ? "NULL" : display(String.valueOf(value.raw()))).toList()));
         }
         out.println("(" + rows.size() + " rows)");
     }

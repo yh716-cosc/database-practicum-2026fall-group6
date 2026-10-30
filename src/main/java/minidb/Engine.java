@@ -53,6 +53,10 @@ public final class Engine {
 
     /** Output labels follow the logical row layout, including repeated columns. */
     private List<String> columnNames(LogicalOperator plan) {
+        if (plan instanceof LogicalOperator.Join join) {
+            return java.util.stream.Stream.concat(columnNames(join.left()).stream(),
+                    columnNames(join.right()).stream()).toList();
+        }
         if (plan instanceof LogicalOperator.Sort sort) return columnNames(sort.child());
         if (plan instanceof LogicalOperator.Limit limit) return columnNames(limit.child());
         if (plan instanceof LogicalOperator.Scan scan) {

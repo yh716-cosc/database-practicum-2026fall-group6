@@ -221,12 +221,12 @@ class SqlParserTest {
 
     @Test
     void rejectsExcludedSyntax() {
-        assertRejects("SELECT a FROM t JOIN u ON a = b", "JOIN is not supported");
+        assertRejects("SELECT a FROM t FULL JOIN u ON a = b", "JOIN is not supported");
         assertRejects("SELECT a FROM t, u", "multiple tables are not supported");
         assertRejects("SELECT a FROM t FROM u", "multiple tables are not supported");
         assertRejects("SELECT a AS b FROM t", "aliases are not supported");
-        assertRejects("SELECT a FROM t AS u", "aliases are not supported");
-        assertRejects("SELECT a FROM t u", "table aliases are not supported");
+        assertEquals("u", parse("SELECT a FROM t AS u").from().get(0).alias());
+        assertEquals("u", parse("SELECT a FROM t u").from().get(0).alias());
         assertRejects("SELECT a b FROM t", "column aliases are not supported");
         assertRejects("SELECT t.* FROM t", "table.* is not supported");
         assertRejects("SELECT *, a FROM t", "cannot be mixed");
@@ -243,7 +243,7 @@ class SqlParserTest {
         assertRejects("SELECT a FROM t LIMIT 1 LIMIT 2", "expected end of input");
         assertRejects("SELECT a FROM t WHERE name LIKE 'a'", "LIKE is not supported");
         assertRejects("SELECT a FROM t WHERE name = NULL", "SQL NULL is not supported");
-        assertRejects("SELECT a FROM t WHERE a IS NULL", "SQL NULL is not supported");
+        assertTrue(parse("SELECT a FROM t WHERE a IS NULL").where() instanceof Expression.IsNull);
         assertRejects("SELECT a FROM t; SELECT b FROM u", "multiple statements are not supported");
         assertRejects("SELECT a FROM t;;", "expected end of input");
         assertRejects("SELECT a FROM t WHERE a = (SELECT b FROM u)", "subqueries are not supported");

@@ -33,4 +33,5 @@ public interface BoundExpression {
     record Or(Predicate left, Predicate right) implements Predicate {}
 
     record Not(Predicate child) implements Predicate {}
+    record IsNull(Scalar operand, boolean negated) implements Predicate {}
 }

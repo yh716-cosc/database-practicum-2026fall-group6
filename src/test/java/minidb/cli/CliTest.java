@@ -100,4 +100,29 @@ class CliTest {
         assertTrue(joinError > queryResult, text);
         assertEquals(4, text.split("minidb>", -1).length - 1);
     }
+
+    @Test
+    void englishCommandExecutesAndRecoversFromCommandError() {
+        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        PrintStream output = new PrintStream(buffer, true, StandardCharsets.UTF_8);
+        new Cli(new Engine(data)).run(new StringReader(
+                "show id from students\nshow all students\nSELECT id FROM students\nquit\n"), output);
+
+        String text = buffer.toString(StandardCharsets.UTF_8);
+        int commandError = text.indexOf("expected 'from'");
+        int result = text.indexOf("(1 rows)", commandError + 1);
+        assertTrue(commandError >= 0, text);
+        assertTrue(result > commandError, text);
+    }
+
+    @Test
+    void englishCommandSupportsLimit() {
+        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        PrintStream output = new PrintStream(buffer, true, StandardCharsets.UTF_8);
+        new Cli(new Engine(data)).run(new StringReader(
+                "show id from students return at most 1 rows\nquit\n"), output);
+
+        String text = buffer.toString(StandardCharsets.UTF_8);
+        assertTrue(text.contains("1\n(1 rows)"), text);
+    }
 }

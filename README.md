@@ -26,6 +26,27 @@ SELECT id FROM students WHERE name = 'O''Brien';
 SELECT id FROM students WHERE name = '';
 ```
 
+The CLI also accepts the deterministic English equivalents below:
+
+```text
+show all from students
+show name, age from students
+show name from students where age is at least 18 and score is at least 85
+show id from students where name equals 'O''Brien'
+show id from students where age is null or name is not null
+show s.name, e.course from students as s inner join enrollments as e
+  on s.id equals e.student_id ordered by e.course descending limited to 10 rows
+```
+
+English commands support `equals`, `is not equal to`, `is less than`,
+`is at most`, `is greater than`, `is at least`, `and`, `or`, `not`, parentheses,
+and `is null` / `is not null`. They also support `inner join`, `left join`,
+`right join`, optional `as` aliases, `order by`/`sort by`/`ordered by`, ascending
+or descending keys, and `limit`/`return at most`/`limited to` row counts. They
+are translated into SQL and then use the same parser, planner, and executor as
+direct SQL input. The English grammar is deliberately strict; unsupported
+wording is rejected rather than guessed.
+
 Expected results: 11 rows; 6 names (Alice, Carol, O'Brien, alice, Max, Alice);
 ID 4; and ID 6, respectively. The final semicolon is optional.
 Type `quit` or `exit` to leave. Multiline statements and multiple statements on

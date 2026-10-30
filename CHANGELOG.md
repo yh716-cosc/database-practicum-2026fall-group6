@@ -1,5 +1,13 @@
 # Project updates
 
+## 2026-10-30 — Repair nullable-storage/JOIN merge
+
+- Remove duplicated predicate methods, IsNull records, and malformed test nesting.
+- Preserve constant predicates, three-valued logic, and all merged test cases.
+- Distinguish typed NULL from literal NULL strings while retaining headers and escaping.
+- Make nullable schema/output assertions portable across LF and CRLF platforms.
+- Reconcile supported-query and nullable-storage documentation.
+
 ## LEFT and RIGHT JOIN extension
 
 - Parse LEFT/RIGHT JOIN with optional OUTER and preserve the logical column layout.

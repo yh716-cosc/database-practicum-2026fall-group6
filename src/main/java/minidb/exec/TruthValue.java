@@ -1,7 +1,6 @@
 package minidb.exec;
 
 /** SQL predicate results; only TRUE passes WHERE or ON. */
-/** SQL predicate results; only TRUE passes WHERE. */
 public enum TruthValue {
     TRUE, FALSE, UNKNOWN;
 

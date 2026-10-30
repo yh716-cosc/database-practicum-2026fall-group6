@@ -42,8 +42,8 @@ class NullableStorageTest {
                 row(4, "\\\\N"), row(5, "\\"), row(6, "\\other"), row(7, "a\\N"),
                 row(Integer.MIN_VALUE, "quoted, \"Zoë\"\n東京"), row(Integer.MAX_VALUE, "00123"));
         new DirectoryTableStore(data).write(TABLE, rows);
-        assertTrue(Files.readString(data.resolve("cells.schema"))
-                .startsWith(SchemaFiles.NULLABLE_FORMAT_MARKER + "\n"));
+        assertEquals(SchemaFiles.NULLABLE_FORMAT_MARKER,
+                Files.readString(data.resolve("cells.schema")).lines().findFirst().orElseThrow());
         assertEquals(Format.NULLABLE_CSV_V1,
                 new DirectoryCatalog(data).getTableDefinition("cells").format());
         assertEquals(TABLE, new DirectoryCatalog(data).getTable("cells"));

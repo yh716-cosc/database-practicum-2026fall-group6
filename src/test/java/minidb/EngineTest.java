@@ -74,6 +74,8 @@ class EngineTest {
         assertTrue(query("SELECT id FROM students ORDER BY age LIMIT 0").isEmpty());
         assertThrows(StorageException.class, () -> engine.execute(
                 "SELECT id FROM students ORDER BY age LIMIT 1"));
+    }
+
     @Test void queriesTableWrittenThroughStorageWithBothTypes() {
         Table table = new Table("imported", List.of(
                 new Column("code", DataType.STRING),

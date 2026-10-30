@@ -18,7 +18,7 @@ public interface Expression {
     record Not(Expression child) implements Expression {}
     record IsNull(Expression operand, boolean negated) implements Expression {}
 
-    record IsNull(Expression operand, boolean negated) implements Expression {}
+
 
     /** Allowed only as the sole SELECT item; expanded by the planner. */
     record Star() implements Expression {}

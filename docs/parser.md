@@ -70,6 +70,8 @@ is preserved. Unqualified columns use a null table in `ColumnRef`.
 
 - Identifiers match storage's `[A-Za-z_][A-Za-z0-9_]*`. `SELECT`, `FROM`,
   `WHERE`, `AND`, `OR`, and `NOT` are reserved. Unquoted `NULL` is accepted only in `IS [NOT] NULL`.
+  `WHERE`, `AND`, `OR`, and `NOT` are reserved. Unquoted `NULL` is accepted only
+  in `IS [NOT] NULL`; `IS` is contextual and can still be a column name.
   A name such as `order` or `join` can still be a column or table; `ORDER BY`
   and two-table INNER/LEFT/RIGHT JOIN are supported.
 - Integers are signed 32-bit values, including `-2147483648`. A sign must sit
@@ -96,6 +98,7 @@ inside `sql/ast/Expression.java`:
 | `= <> < <= > >=` | `ComparisonOp.EQ, NE, LT, LE, GT, GE` |
 | comparison | `Expression.Comparison` |
 | `AND` / `OR` / `NOT` | `Expression.And`, `Or`, `Not` |
+| `operand IS [NOT] NULL` | `Expression.IsNull(operand, negated)` |
 | lone `*` | `Expression.Star` as the only `SelectItem` |
 | `students.age` / `age` | existing `ColumnRef` |
 
@@ -114,6 +117,9 @@ offset is not printed in the message. A tab counts as one column. Line breaks ar
 Rejected forms include FULL/CROSS/NATURAL/multiway joins, JOIN USING, column aliases, comma joins, `table.*`, `*` mixed
 with other select items, `GROUP BY`, `HAVING`, `DISTINCT`,
 aggregates, `OFFSET`, `LIKE`, standalone `NULL` literals, quoted identifiers, comments,
+Rejected forms include JOIN, aliases, more than one table, `table.*`, `*` mixed
+with other select items, `ORDER BY`, `GROUP BY`, `HAVING`, `DISTINCT`,
+aggregates, `LIMIT`, `LIKE`, standalone NULL literals, quoted identifiers, comments,
 arithmetic, subqueries, updates, chained comparisons such as `age < 20 < 30`,
 and a second statement after the semicolon.
 

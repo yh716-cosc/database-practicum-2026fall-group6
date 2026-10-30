@@ -30,7 +30,7 @@ id,name,age
 2,"Smith, Bob",22
 ```
 
-Rules for this first version:
+Rules shared by both storage formats:
 
 - Files use UTF-8 without a byte-order mark. CSV uses Apache Commons CSV's RFC4180
   format, supporting quoted commas, escaped double quotes, and embedded newlines.
@@ -41,7 +41,7 @@ Rules for this first version:
 - `INTEGER` is a signed 32-bit Java `Integer`. Optional `+`/`-` signs are accepted;
   spaces, fractions, empty fields, and overflow are errors.
 - `STRING` preserves contents, including spaces, empty strings, and leading zeros.
-  The text `NULL` is an ordinary string. SQL nulls are not supported.
+  The text `NULL` is an ordinary string. Typed SQL NULLs use the versioned encoding below.
 - Each record must have exactly the declared number of fields. Invalid records fail
   the scan; they are not silently skipped. Blank CSV lines are records, not comments.
 - A header-only CSV is a valid empty table. A completely empty CSV is invalid.
@@ -51,6 +51,51 @@ Rules for this first version:
 Explicit schemas avoid guessing whether values such as `00123` are numbers or text.
 They are storage metadata, not SQL parser configuration. This format can be revised
 later if the team chooses another catalog representation.
+
+CSV conversion and write validation handle `INTEGER` and `STRING` with exhaustive
+`switch` expressions. Adding a new `DataType` requires updating both switches;
+unsupported new types cannot silently fall through to string handling.
+
+## Nullable CSV format and compatibility
+
+Schemas without a format marker retain the original interpretation: every STRING
+field is literal text, including `\N`, and empty/invalid INTEGER fields are errors.
+Existing tables are never silently upgraded. Every newly written table starts its
+schema with this marker, before any columns:
+
+```text
+# minidb-format nullable-csv-v1
+id INTEGER
+name STRING
+```
+
+In that format, decoding happens after ordinary RFC4180 CSV parsing:
+
+| Parsed CSV field | Typed cell |
+| --- | --- |
+| `\N` | NULL of the declared INTEGER or STRING type |
+| `\\N` | Literal STRING `\N` |
+| `\\path` | Literal STRING `\path` |
+| empty field | Empty STRING; invalid INTEGER |
+| `NULL` | Literal STRING `NULL`; invalid INTEGER |
+
+For non-null strings beginning with a backslash, the writer prefixes one extra
+backslash; the reader removes it. Any other single-backslash prefix is invalid in
+this version. CSV quoting is a separate layer: even a quoted `\N` means NULL, so a
+literal token must use the backslash escape. Unknown versions, repeated markers,
+and markers after column declarations fail rather than being guessed.
+
+Use `Value.nullValue(DataType.INTEGER)` or `Value.nullValue(DataType.STRING)` to
+construct typed NULL cells. Their type must still match the schema. A missing
+`Value` object is an error. `Value.isNull()` tests the payload. `Catalog.getTable`
+continues returning the same column schema; `getTableDefinition` additionally
+returns the disk format. Custom catalogs default to legacy CSV unless they override
+that method to supply `NULLABLE_CSV_V1`.
+
+SQL can select stored NULLs and test `column IS NULL` / `IS NOT NULL`. Comparisons
+with NULL yield UNKNOWN; AND/OR/NOT use SQL three-valued logic, and WHERE retains
+only TRUE. Output prints a NULL cell as `NULL`, distinct from the quoted string
+`'NULL'`. Standalone NULL literals such as `age = NULL` remain unsupported.
 
 ## Read disk data into memory
 
@@ -104,7 +149,7 @@ Additional imports: `java.util.List`, `minidb.catalog.*`, and `minidb.types.*`.
 
 `write()` creates the output directory if needed and writes both files. An `Iterable`
 can produce rows lazily, so a large export does not require a list. Each cell must
-have the declared type and a matching non-null Java value (`Integer` or `String`).
+have the declared type and a matching Java value (`Integer`, `String`, or typed NULL).
 The CSV printer escapes contents; callers should supply the original strings.
 
 Writing rejects an existing CSV **or** schema file. There is no overwrite, append,
@@ -121,6 +166,60 @@ This is not a crash-atomic two-file transaction: a process or machine crash betw
 moves can leave an orphan CSV or temporary files. Concurrent writers and database
 changes during queries are outside this static-database design. Prepare tables
 before running queries.
+
+## Table statistics and external edits
+
+Statistics are optional Java storage API operations; there is no SQL ANALYZE
+statement, persistent `.stats` file, or optimizer integration yet:
+
+```java
+TableStore store = new DirectoryTableStore(Path.of("data"));
+TableStatistics stats = store.statistics("students");
+long rows = stats.rowCount();
+TableStatistics.ColumnStatistics names = stats.columns().get("name");
+long nullNames = names.nullCount();
+long distinctNames = names.distinctCount();
+boolean exact = names.distinctCountExact();
+
+// Force a fresh complete scan after an external edit, regardless of timestamps.
+TableStatistics refreshed = store.analyze("students");
+```
+
+Both methods fully parse and validate every record when collecting; they return
+exact row counts (excluding the header), per-column NULL counts, CSV byte size,
+column types, and a collection timestamp. Quoted multiline fields count as one
+record. `distinctCount` excludes NULL, but includes empty strings and literal
+`NULL` strings. It is exact through 256 distinct non-null values per column.
+Larger sets use a 1,024-register HyperLogLog estimate, flagged with
+`distinctCountExact == false`. Its expected relative standard error is about
+3.25%, not a guaranteed error bound; results are capped at the non-null row count.
+The estimator follows [Flajolet et al. (2007)](https://algo.inria.fr/flajolet/Publications/FlFuGaMe07.pdf).
+Distinct-value state retains at most 256 actual values plus 1 KB of registers per
+column, then discards actual values on promotion. It does not retain every row or
+every distinct value. Each returned statistics object and column map is immutable.
+
+Collection and refresh policy:
+
+- Reads and writes do not automatically collect statistics. The first
+  `statistics(name)` call performs a full scan and caches the result in that store
+  instance. A fresh store collects again; partial scans never produce row counts.
+- Before reusing a cache entry, `statistics` checks both CSV and schema file sizes,
+  full-resolution modification times, creation times, file identities (where the
+  filesystem supplies them), and the current parsed table definition. Changes
+  trigger a full recollection. This includes external appends, ordinary edits,
+  file replacements, and schema-only edits.
+- File metadata is a change detector, not a content checksum. An in-place CSV edit
+  that preserves size and timestamps can be invisible to the cache. After editors
+  or copy tools that preserve these attributes, call `analyze(name)`. That method
+  always scans, even if all metadata matches. Previously returned snapshots remain
+  unchanged; callers request statistics again when they need updated values.
+- Collection checks files/definition again after scanning. Detected concurrent
+  edits raise `StorageException`; malformed data, missing files, and any failed
+  refresh evict the old entry and never return stale or partial counts as fallback.
+  Fix the input and retry. This is best-effort change detection, not a filesystem
+  snapshot: finish external edits before running queries or collecting statistics.
+- Statistics do not change query correctness, skip validation, or select an index.
+  A malformed record remains an error even if a prior count was available.
 
 ## Team integration
 

@@ -14,6 +14,8 @@ plan. It uses table metadata only; it never scans or evaluates data rows.
    support all six comparison operators, strings only equality and inequality.
    AND/OR/NOT require predicates. Both boolean branches are validated, even when
    runtime evaluation could short-circuit one of them.
+   IS NULL / IS NOT NULL bind a scalar operand without changing its declared type.
+   At runtime NULL comparisons yield UNKNOWN, and only TRUE passes WHERE.
 4. Bind SELECT columns or expand star in schema order, retaining duplicates.
 5. Bind ORDER BY keys against the original schema, then add Sort and Limit.
 6. Return `Project(Limit(Sort(Filter(input))))`, omitting absent clauses;

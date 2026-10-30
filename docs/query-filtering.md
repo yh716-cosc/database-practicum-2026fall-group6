@@ -11,6 +11,9 @@ INTEGER and STRING operands; comparisons, NOT, AND, OR, and parentheses.
 Integer comparisons support all six operators; strings support only equality and
 inequality. No implicit conversion, SQL NULL, JOIN, grouping, aggregation,
 arithmetic, or writes through SQL. ORDER BY and LIMIT are now supported; see [sort and limit](sort-limit.md). Full grammar is in [parser.md](parser.md).
+inequality. Typed stored NULLs and IS NULL / IS NOT NULL are supported. No implicit
+conversion, standalone NULL literals, JOIN, sorting, grouping, aggregation,
+arithmetic, or writes through SQL. Full grammar is in [parser.md](parser.md).
 
 ## Component contracts
 
@@ -39,12 +42,14 @@ never excuses a type error or unknown column.
 The actual bound node types are nested in `BoundExpression`:
 
 - Scalar: `Column(index, type)` and `Literal(Value)`.
-- Predicate: `Comparison`, `And`, `Or`, and `Not`.
+- Predicate: `Comparison`, `IsNull`, `And`, `Or`, and `Not`.
 
 INTEGER/INTEGER supports `= <> < <= > >=` using signed numeric comparison.
 STRING/STRING supports `= <>` with exact String equality (no trimming or Unicode
 normalization). Mixed types fail planning. Boolean results are intermediate
 predicates, not a storage data type.
+Comparisons with NULL yield UNKNOWN. AND/OR/NOT follow SQL three-valued logic;
+WHERE retains only TRUE. IS NULL / IS NOT NULL always yield TRUE or FALSE.
 
 For the shared schema `id, name, age, score`:
 
@@ -84,6 +89,8 @@ Operators cover open failures even though Engine opens the root before its try b
 
 Operators stream input, but Engine collects the entire result in QueryResult;
 memory therefore grows with output size. Result printing includes column names and raw values. Empty strings display as `""`; backslashes, line breaks, tabs, and pipes are escaped.
+memory therefore grows with output size. Result printing displays cell values,
+quotes strings, and prints typed NULLs as `NULL`.
 
 ## Errors
 

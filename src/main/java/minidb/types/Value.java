@@ -1,6 +1,6 @@
 package minidb.types;
 
-/** One cell. raw matches type, or is null for a typed SQL NULL in query results. */
+/** One cell. raw matches type, or is null for a typed SQL NULL. */
 public record Value(DataType type, Object raw) {
     public static Value nullValue(DataType type) {
         return new Value(java.util.Objects.requireNonNull(type), null);

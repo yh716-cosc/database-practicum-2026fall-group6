@@ -26,6 +26,6 @@ Enter one complete SQL statement per line at `minidb>`. Type `quit` to exit.
 | `SELECT id FROM students WHERE age > 100;` | 0 rows |
 | `SELECT id FROM students WHERE age = '18';` | Type error; the prompt remains usable |
 
-Output currently uses `Value[type=..., raw=...]`; `raw` is the cell value.
+Output displays values separated by ` | `, with strings in single quotes.
 The extreme scores intentionally test signed 32-bit integer boundaries, rather
 than realistic student scores. Keep the sample unchanged when comparing results.

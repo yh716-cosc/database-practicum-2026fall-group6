@@ -16,7 +16,7 @@ import org.apache.commons.csv.CSVRecord;
 
 import minidb.catalog.Column;
 import minidb.catalog.Table;
-import minidb.types.DataType;
+import minidb.catalog.TableDefinition.Format;
 import minidb.types.Value;
 
 /** A single-use scan. Keeps only the parser's buffer and the current record in memory. */
@@ -27,15 +27,17 @@ final class CsvRowCursor implements RowCursor {
 
     private final Path path;
     private final Table table;
+    private final Format format;
     private State state = State.NEW;
     private Reader reader;
     private CSVParser parser;
     private Iterator<CSVRecord> records;
     private long nextRecord = 1;
 
-    CsvRowCursor(Path path, Table table) {
+    CsvRowCursor(Path path, Table table, Format format) {
         this.path = path;
         this.table = table;
+        this.format = format;
     }
 
     @Override
@@ -81,18 +83,33 @@ final class CsvRowCursor implements RowCursor {
             for (int i = 0; i < record.size(); i++) {
                 Column column = table.columns().get(i);
                 String text = record.get(i);
-                Object raw = text;
-                if (column.type() == DataType.INTEGER) {
-                    try {
-                        if (!INTEGER_PATTERN.matcher(text).matches()) {
-                            throw new NumberFormatException("Not a decimal integer");
+                if (format == Format.NULLABLE_CSV_V1) {
+                    if (text.equals("\\N")) {
+                        values.add(Value.nullValue(column.type()));
+                        continue;
+                    }
+                    if (text.startsWith("\\")) {
+                        if (!text.startsWith("\\\\")) {
+                            throw new StorageException(context + ", column " + column.name()
+                                    + ": invalid nullable CSV escape");
                         }
-                        raw = Integer.valueOf(text);
-                    } catch (NumberFormatException e) {
-                        throw new StorageException(context + ", column " + column.name()
-                                + ": expected 32-bit INTEGER, found \"" + text + "\"", e);
+                        text = text.substring(1);
                     }
                 }
+                Object raw = switch (column.type()) {
+                    case INTEGER -> {
+                        try {
+                            if (!INTEGER_PATTERN.matcher(text).matches()) {
+                                throw new NumberFormatException("Not a decimal integer");
+                            }
+                            yield Integer.valueOf(text);
+                        } catch (NumberFormatException e) {
+                            throw new StorageException(context + ", column " + column.name()
+                                    + ": expected 32-bit INTEGER, found \"" + text + "\"", e);
+                        }
+                    }
+                    case STRING -> text;
+                };
                 values.add(new Value(column.type(), raw));
             }
             nextRecord++;

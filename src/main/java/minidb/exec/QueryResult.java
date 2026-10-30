@@ -3,8 +3,11 @@ package minidb.exec;
 import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import minidb.storage.Row;
+import minidb.types.DataType;
+import minidb.types.Value;
 
 public final class QueryResult {
     private final List<Row> rows = new ArrayList<>();

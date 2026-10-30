@@ -28,6 +28,8 @@ public interface BoundExpression {
     /** INTEGER supports all operators; STRING supports EQ and NE only. */
     record Comparison(Scalar left, ComparisonOp op, Scalar right) implements Predicate {}
 
+    record IsNull(Scalar operand, boolean negated) implements Predicate {}
+
     record And(Predicate left, Predicate right) implements Predicate {}
 
     record Or(Predicate left, Predicate right) implements Predicate {}

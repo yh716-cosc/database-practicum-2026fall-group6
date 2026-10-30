@@ -247,6 +247,8 @@ class SqlParserTest {
         assertRejects("SELECT a FROM t WHERE name LIKE 'a'", "LIKE is not supported");
         assertRejects("SELECT a FROM t WHERE name = NULL", "SQL NULL is not supported");
         assertTrue(parse("SELECT a FROM t WHERE a IS NULL").where() instanceof Expression.IsNull);
+        assertRejects("SELECT a FROM t WHERE a IS 1", "expected NULL");
+        assertRejects("SELECT a FROM t WHERE a IS NOT", "expected NULL");
         assertRejects("SELECT a FROM t; SELECT b FROM u", "multiple statements are not supported");
         assertRejects("SELECT a FROM t;;", "expected end of input");
         assertRejects("SELECT a FROM t WHERE a = (SELECT b FROM u)", "subqueries are not supported");

@@ -34,10 +34,15 @@ public final class DirectoryCatalog implements Catalog {
 
     @Override
     public Table getTable(String name) {
+        return getTableDefinition(name).table();
+    }
+
+    @Override
+    public TableDefinition getTableDefinition(String name) {
         SchemaFiles.validateName(name);
         if (!Files.isRegularFile(dataDir.resolve(name + ".csv"))) {
             throw new StorageException("Missing table data: " + dataDir.resolve(name + ".csv"));
         }
-        return SchemaFiles.read(dataDir.resolve(name + ".schema"), name);
+        return SchemaFiles.readDefinition(dataDir.resolve(name + ".schema"), name);
     }
 }

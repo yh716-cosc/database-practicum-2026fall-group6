@@ -16,6 +16,8 @@ import minidb.types.DataType;
 
 /** Simple schema files: one "columnName TYPE" declaration per line. */
 public final class SchemaFiles {
+    public static final String NULLABLE_FORMAT_MARKER = "# minidb-format nullable-csv-v1";
+
     private SchemaFiles() {
     }
 
@@ -46,14 +48,28 @@ public final class SchemaFiles {
     }
 
     public static Table read(Path path, String tableName) {
+        return readDefinition(path, tableName).table();
+    }
+
+    public static TableDefinition readDefinition(Path path, String tableName) {
         validateName(tableName);
         List<Column> columns = new ArrayList<>();
+        TableDefinition.Format format = TableDefinition.Format.LEGACY_CSV;
         try (BufferedReader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
             String line;
             int lineNumber = 0;
             while ((line = reader.readLine()) != null) {
                 lineNumber++;
                 if (line.isBlank()) {
+                    continue;
+                }
+                if (line.strip().startsWith("# minidb-format")) {
+                    if (!columns.isEmpty() || format != TableDefinition.Format.LEGACY_CSV
+                            || !line.strip().equals(NULLABLE_FORMAT_MARKER)) {
+                        throw new StorageException(path + ", line " + lineNumber
+                                + ": unsupported, repeated, or misplaced storage format marker");
+                    }
+                    format = TableDefinition.Format.NULLABLE_CSV_V1;
                     continue;
                 }
                 String[] parts = line.strip().split("\\s+");
@@ -72,13 +88,15 @@ public final class SchemaFiles {
         }
         Table table = new Table(tableName, List.copyOf(columns));
         validate(table);
-        return table;
+        return new TableDefinition(table, format);
     }
 
     /** Write to a caller-owned staging file; table publication is handled by the store. */
     public static void write(Path path, Table table) throws IOException {
         validate(table);
         try (BufferedWriter writer = Files.newBufferedWriter(path, StandardCharsets.UTF_8)) {
+            writer.write(NULLABLE_FORMAT_MARKER);
+            writer.newLine();
             for (Column column : table.columns()) {
                 writer.write(column.name() + " " + column.type().name());
                 writer.newLine();

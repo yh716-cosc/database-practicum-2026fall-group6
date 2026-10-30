@@ -1,6 +1,7 @@
 package minidb;
 
 import java.nio.file.Path;
+import java.util.List;
 
 import minidb.catalog.Catalog;
 import minidb.catalog.DirectoryCatalog;
@@ -9,6 +10,7 @@ import minidb.exec.Operator;
 import minidb.exec.QueryResult;
 import minidb.plan.LogicalOperator;
 import minidb.plan.Planner;
+import minidb.plan.Optimizer;
 import minidb.sql.Parser;
 import minidb.sql.SqlParser;
 import minidb.sql.ast.Statement;
@@ -35,10 +37,10 @@ public final class Engine {
     public QueryResult execute(String sql) {
         Statement statement = parser.parse(sql);
         LogicalOperator plan = planner.plan(statement, catalog);
-        Operator root = executor.compile(plan);
+        QueryResult result = new QueryResult(columnNames(plan));
+        Operator root = executor.compile(new Optimizer().optimize(plan));
         root.open();
         try {
-            QueryResult result = new QueryResult();
             Row row;
             while ((row = root.next()) != null) {
                 result.add(row);
@@ -47,5 +49,27 @@ public final class Engine {
         } finally {
             root.close();
         }
+    }
+
+    /** Output labels follow the logical row layout, including repeated columns. */
+    private List<String> columnNames(LogicalOperator plan) {
+        if (plan instanceof LogicalOperator.Join join) {
+            return java.util.stream.Stream.concat(columnNames(join.left()).stream(),
+                    columnNames(join.right()).stream()).toList();
+        }
+        if (plan instanceof LogicalOperator.Sort sort) return columnNames(sort.child());
+        if (plan instanceof LogicalOperator.Limit limit) return columnNames(limit.child());
+        if (plan instanceof LogicalOperator.Scan scan) {
+            return catalog.getTable(scan.tableName()).columns().stream()
+                    .map(column -> column.name()).toList();
+        }
+        if (plan instanceof LogicalOperator.Filter filter) {
+            return columnNames(filter.child());
+        }
+        if (plan instanceof LogicalOperator.Project project) {
+            List<String> input = columnNames(project.child());
+            return project.columnIndexes().stream().map(input::get).toList();
+        }
+        throw new IllegalArgumentException("Unsupported logical plan: " + plan);
     }
 }

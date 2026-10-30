@@ -24,6 +24,25 @@ class CliTest {
         Files.writeString(data.resolve("students.csv"), "id\n1\n");
     }
     @Test
+    void storageErrorsDoNotStopTheNextStatement() throws Exception {
+        Files.writeString(data.resolve("broken.schema"), "id INTEGER\n");
+        Files.writeString(data.resolve("broken.csv"), "id\nbad\n");
+        Files.writeString(data.resolve("header.schema"), "id INTEGER\n");
+        Files.writeString(data.resolve("header.csv"), "wrong\n1\n");
+        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        new Cli(new Engine(data)).run(new StringReader(
+                "SELECT * FROM absent\nSELECT id FROM students\n"
+                + "SELECT * FROM broken\nSELECT id FROM students\n"
+                + "SELECT * FROM header\nSELECT id FROM students\nquit\n"),
+                new PrintStream(buffer, true, StandardCharsets.UTF_8));
+        String text = buffer.toString(StandardCharsets.UTF_8);
+        assertEquals(3, text.split("\\(1 rows\\)", -1).length - 1, text);
+        assertEquals(7, text.split("minidb>", -1).length - 1, text);
+        assertTrue(text.contains("id\n--\n1\n".replace("\n", System.lineSeparator())), text);
+        assertTrue(!text.contains("Value[type="), text);
+    }
+
+    @Test
     void planningErrorDoesNotStopTheNextStatement() {
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
         PrintStream output = new PrintStream(buffer, true, StandardCharsets.UTF_8);
@@ -75,7 +94,7 @@ class CliTest {
         String text = buffer.toString(StandardCharsets.UTF_8);
         int parseError = text.indexOf("expected column name");
         int queryResult = text.indexOf("(1 rows)");
-        int joinError = text.indexOf("JOIN is not supported");
+        int joinError = text.indexOf("expected ON");
         assertTrue(parseError >= 0, text);
         assertTrue(queryResult > parseError, text);
         assertTrue(joinError > queryResult, text);

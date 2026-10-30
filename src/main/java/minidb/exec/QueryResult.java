@@ -11,6 +11,19 @@ import minidb.types.Value;
 
 public final class QueryResult {
     private final List<Row> rows = new ArrayList<>();
+    private final List<String> columnNames;
+
+    public QueryResult() {
+        this(List.of());
+    }
+
+    public QueryResult(List<String> columnNames) {
+        this.columnNames = List.copyOf(columnNames);
+    }
+
+    public List<String> columnNames() {
+        return columnNames;
+    }
 
     public void add(Row row) {
         rows.add(row);
@@ -21,23 +34,22 @@ public final class QueryResult {
     }
 
     public void printTo(PrintStream out) {
+        if (!columnNames.isEmpty()) {
+            out.println(String.join(" | ", columnNames.stream().map(QueryResult::display).toList()));
+            out.println(String.join("-+-", columnNames.stream()
+                    .map(name -> "-".repeat(display(name).length())).toList()));
+        }
         for (Row row : rows) {
-            out.println(format(row));
+            out.println(String.join(" | ", row.values().stream()
+                    .map(value -> value.isNull() ? "NULL" : display(String.valueOf(value.raw()))).toList()));
         }
         out.println("(" + rows.size() + " rows)");
     }
 
-    private static String format(Row row) {
-        return row.values().stream()
-                .map(QueryResult::formatValue)
-                .collect(Collectors.joining(" | "));
-    }
-
-    private static String formatValue(Value value) {
-        if (value.isNull()) return "NULL";
-        if (value.type() == DataType.STRING) {
-            return "'" + value.raw() + "'";
-        }
-        return String.valueOf(value.raw());
+    /** Keep one physical line per row and make empty strings visible. */
+    private static String display(String value) {
+        if (value.isEmpty()) return "\"\"";
+        return value.replace("\\", "\\\\").replace("\r", "\\r")
+                .replace("\n", "\\n").replace("\t", "\\t").replace("|", "\\|");
     }
 }

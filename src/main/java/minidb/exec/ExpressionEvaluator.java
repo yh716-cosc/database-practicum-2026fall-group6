@@ -21,6 +21,13 @@ public final class ExpressionEvaluator {
         return truth(predicate, row) == TruthValue.TRUE;
     }
 
+    /** Retains UNKNOWN through boolean expressions instead of treating it as FALSE. */
+    public TruthValue truth(BoundExpression.Predicate predicate, Row row) {
+        if (predicate instanceof BoundExpression.IsNull check) {
+            return TruthValue.of(evaluate(check.operand(), row).isNull() != check.negated());
+        }
+        if (predicate instanceof BoundExpression.Constant constant) {
+            return TruthValue.of(constant.value());
     public TruthValue truth(BoundExpression.Predicate predicate, Row row) {
         if (predicate instanceof BoundExpression.IsNull check) {
             boolean isNull = evaluate(check.operand(), row).isNull();

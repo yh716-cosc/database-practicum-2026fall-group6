@@ -36,6 +36,44 @@ class EngineTest {
                 List.of(3, "O'Brien", 25), List.of(1, "Alice", 20)), query("SELECT * FROM students"));
     }
 
+    @Test void resultHeadersFollowProjectionEvenForEmptyResults() {
+        assertEquals(List.of("id", "name", "age"),
+                engine.execute("SELECT * FROM students").columnNames());
+        var result = engine.execute("SELECT name, students.id, name FROM students WHERE 1 = 0");
+        assertEquals(List.of("name", "id", "name"), result.columnNames());
+        assertTrue(result.rows().isEmpty());
+    }
+
+    @Test void sortsMultipleKeysBeforeProjectionAndThenLimits() {
+        assertEquals(List.of(List.of("Bob", 2, "Bob"), List.of("Alice", 1, "Alice")),
+                query("SELECT name, id, name FROM students WHERE age >= 17 "
+                        + "ORDER BY students.age ASC, id DESC LIMIT 2"));
+        assertEquals(List.of(List.of(3), List.of(2), List.of(1), List.of(1)),
+                query("SELECT id FROM students ORDER BY name DESC"));
+        assertEquals(List.of("name"), engine.execute(
+                "SELECT name FROM students ORDER BY age LIMIT 0").columnNames());
+        assertTrue(query("SELECT name FROM students ORDER BY age LIMIT 0").isEmpty());
+        assertEquals(4, query("SELECT * FROM students LIMIT 100").size());
+    }
+
+    @Test void validatesSortAndLimitBeforeExecution() {
+        assertThrows(PlanningException.class, () -> engine.execute(
+                "SELECT id FROM students ORDER BY missing LIMIT 0"));
+        assertThrows(PlanningException.class, () -> engine.execute(
+                "SELECT id FROM students ORDER BY other.id"));
+        for (String suffix : List.of("LIMIT -1", "LIMIT '1'", "LIMIT 2147483648",
+                "ORDER BY", "ORDER BY age,", "LIMIT 1 ORDER BY age", "LIMIT 1 OFFSET 1")) {
+            assertThrows(minidb.sql.SqlParseException.class,
+                    () -> engine.execute("SELECT id FROM students " + suffix), suffix);
+        }
+    }
+
+    @Test void limitSkipsUnreadBadRowsButSortMustReadAllRows() throws Exception {
+        Files.writeString(data.resolve("students.csv"), "id,name,age\n1,Alice,20\nbad,Bob,17\n");
+        assertEquals(List.of(List.of(1)), query("SELECT id FROM students LIMIT 1"));
+        assertTrue(query("SELECT id FROM students ORDER BY age LIMIT 0").isEmpty());
+        assertThrows(StorageException.class, () -> engine.execute(
+                "SELECT id FROM students ORDER BY age LIMIT 1"));
     @Test void queriesTableWrittenThroughStorageWithBothTypes() {
         Table table = new Table("imported", List.of(
                 new Column("code", DataType.STRING),
@@ -80,5 +118,19 @@ class EngineTest {
         Files.writeString(data.resolve("students.csv"), "id,name,age\nbad,Alice,20\n");
         assertThrows(PlanningException.class, () -> engine.execute("SELECT id FROM students WHERE age = '18'"));
         assertThrows(StorageException.class, () -> engine.execute("SELECT id FROM students"));
+    }
+
+    @Test void optimizesConstantsAfterValidationAndStillDetectsBadStorage() throws Exception {
+        assertEquals(query("SELECT name, id, name FROM students WHERE age >= 18"),
+                query("SELECT name, id, name FROM students WHERE NOT NOT (age >= 18) AND 1 = 1"));
+        assertEquals(4, query("SELECT id FROM students WHERE 1 = 1 OR age < 0").size());
+        assertTrue(query("SELECT id FROM students WHERE 1 = 0 AND age >= 18").isEmpty());
+        assertThrows(PlanningException.class, () -> engine.execute(
+                "SELECT id FROM students WHERE 1 = 1 OR age = 'bad'"));
+        assertThrows(PlanningException.class, () -> engine.execute(
+                "SELECT id FROM students WHERE 1 = 0 AND missing = 1"));
+        Files.writeString(data.resolve("students.csv"), "id,name,age\nbad,Alice,20\n");
+        assertThrows(StorageException.class, () -> engine.execute(
+                "SELECT id FROM students WHERE 1 = 0"));
     }
 }

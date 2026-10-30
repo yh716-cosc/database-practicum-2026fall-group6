@@ -1,19 +1,48 @@
 # Project updates
 
-## 2026-10-30 — Nullable storage and table statistics
+## LEFT and RIGHT JOIN extension
 
-- New writes use a versioned CSV encoding that distinguishes typed NULLs, empty
-  strings, literal NULL text, and escaped backslashes. Unmarked tables keep their
-  original interpretation; schemas and existing table identities remain compatible.
-- Add IS NULL / IS NOT NULL, three-valued predicate evaluation, and NULL output
-  so stored nullable rows can be queried on main as well as the newer query branch.
-- Add optional statistics/analyze storage APIs: exact row and NULL counts, CSV
-  size, collection timestamp, and exact small / estimated large distinct counts.
-- Collect lazily into a per-store memory cache; refresh on CSV/schema metadata or
-  definition changes. Explicit analyze handles timestamp/size-preserving edits.
-  Failed refreshes evict old entries, and detected mid-collection changes fail.
-- Cover format compatibility, SQL NULL logic, statistics accuracy and refresh,
-  failed scans, and large-input statistics under a constrained heap.
+- Parse LEFT/RIGHT JOIN with optional OUTER and preserve the logical column layout.
+- Extend the tuple nested-loop operator to null-extend unmatched preserved rows.
+- Execute RIGHT joins with swapped physical inputs, without rebinding logical indexes.
+- Add typed query NULLs, SQL three-valued predicates, IS NULL/IS NOT NULL, NULL sorting and display.
+- Keep CSV storage unchanged and keep standalone NULL literals unsupported.
+- Add outer-join, null-logic, failure, and lifecycle regression tests.
+
+## 2026-10-29 — Two-table INNER JOIN
+
+- Add table aliases and a single two-table column-equality INNER JOIN.
+- Bind qualified and unqualified names against the combined schema; reject ambiguity.
+- Execute streaming tuple nested-loop joins using fresh right subtrees per left row.
+- Preserve duplicate matches, output labels, filtering, sorting, and limits.
+- Add integration and lifecycle tests covering EOF, early close, failures, and cleanup.
+- See docs/join.md for supported syntax, performance, and error visibility.
+
+## 2026-10-23 — ORDER BY and LIMIT
+
+- Parse optional ORDER BY column lists with ASC/DESC and non-negative LIMIT.
+- Bind sort keys before projection, including columns absent from SELECT.
+- Add stable in-memory SortOperator and streaming LimitOperator with cleanup.
+- Optimizer merges adjacent limits and identical adjacent sorts.
+- Document early termination, LIMIT 0, memory use, and file responsibilities in
+  docs/sort-limit.md.
+
+## 2026-10-23 — CLI recovery and readable query results
+
+- CLI displays StorageException messages and continues accepting statements.
+- Query results carry output column names, including star expansion, reordered
+  and repeated columns, and empty results.
+- Print headers and raw values; show empty strings as `""` and escape backslashes,
+  line breaks, tabs, and pipes to keep each row on one line.
+- Added recovery, result metadata, and output-format regression tests.
+
+## 2026-10-23 — Rule-based optimizer v1
+
+- Added optimization between planning and execution.
+- Fold literal comparisons and constant boolean branches; remove double negation
+  and true filters; compose consecutive projections.
+- Preserve planning validation, row order/duplicates, and storage errors under
+  false filters. No statistics or cost-based optimization yet.
 
 ## 2026-10-11 — Single-table query execution
 

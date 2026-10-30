@@ -10,6 +10,8 @@ import minidb.sql.ast.Query;
 import minidb.sql.ast.SelectItem;
 import minidb.sql.ast.Statement;
 import minidb.sql.ast.TableRef;
+import minidb.sql.ast.OrderBy;
+import minidb.sql.ast.Join;
 
 /**
  * Recursive-descent parser for one SELECT statement. Each {@code parse} call
@@ -40,10 +42,51 @@ public final class SqlParser implements Parser {
             List<SelectItem> select = selectList();
             expect(Token.Kind.FROM, "FROM");
             TableRef table = fromTable();
+            List<Join> joins = new ArrayList<>();
+            if (word("inner") || word("join") || word("left") || word("right")) {
+                Join.Type type = word("left") ? Join.Type.LEFT : word("right") ? Join.Type.RIGHT : Join.Type.INNER;
+                if (!word("join")) advance();
+                if (type != Join.Type.INNER && word("outer")) advance();
+                if (!word("join")) throw unexpected("JOIN");
+                advance();
+                TableRef right = fromTable();
+                if (!word("on")) throw unexpected("ON");
+                advance();
+                joins.add(new Join(right, predicate(), type));
+            }
+            if (word("join") || word("inner") || word("left") || word("right")) {
+                throw error("Only two-table JOIN is supported");
+            }
             Expression where = null;
             if (current.kind() == Token.Kind.WHERE) {
                 advance();
                 where = predicate();
+            }
+            List<OrderBy> orderBy = new ArrayList<>();
+            if (word("order")) {
+                advance();
+                if (!word("by")) throw unexpected("BY");
+                advance();
+                do {
+                    ColumnRef column = columnRef("ORDER BY column");
+                    boolean ascending = true;
+                    if (word("asc") || word("desc")) {
+                        ascending = word("asc");
+                        advance();
+                    }
+                    orderBy.add(new OrderBy(column, ascending));
+                    if (current.kind() != Token.Kind.COMMA) break;
+                    advance();
+                } while (true);
+            }
+            Integer limit = null;
+            if (word("limit")) {
+                advance();
+                if (current.kind() != Token.Kind.INTEGER || current.intValue() < 0) {
+                    throw error("LIMIT requires a non-negative 32-bit integer");
+                }
+                limit = current.intValue();
+                advance();
             }
             if (current.kind() == Token.Kind.SEMICOLON) {
                 advance();
@@ -51,7 +94,12 @@ public final class SqlParser implements Parser {
             if (current.kind() != Token.Kind.EOF) {
                 throw unexpected("end of input");
             }
-            return new Query(List.copyOf(select), List.of(table), List.of(), where);
+            return new Query(List.copyOf(select), List.of(table), List.copyOf(joins), where,
+                    List.copyOf(orderBy), limit);
+        }
+
+        private boolean word(String text) {
+            return current.kind() == Token.Kind.IDENTIFIER && current.text().equalsIgnoreCase(text);
         }
 
         private List<SelectItem> selectList() {
@@ -101,14 +149,19 @@ public final class SqlParser implements Parser {
 
         private TableRef fromTable() {
             Token name = expectIdentifier("table name");
-            if (current.kind() == Token.Kind.IDENTIFIER) {
-                String clause = clauseMessage(current.text());
-                throw error(clause != null ? clause : "table aliases are not supported");
+            String alias = null;
+            if (word("as")) {
+                advance();
+                alias = expectIdentifier("table alias").text();
+            } else if (current.kind() == Token.Kind.IDENTIFIER && !word("order") && !word("limit")
+                    && clauseMessage(current.text()) == null) {
+                alias = current.text();
+                advance();
             }
             if (current.kind() == Token.Kind.COMMA || current.kind() == Token.Kind.FROM) {
                 throw error("multiple tables are not supported");
             }
-            return new TableRef(name.text(), null);
+            return new TableRef(name.text(), alias);
         }
 
         private Expression predicate() {
@@ -157,6 +210,7 @@ public final class SqlParser implements Parser {
 
         private Expression comparison() {
             Expression left = operand();
+            if (word("is")) {
             if (current.kind() == Token.Kind.IDENTIFIER && current.text().equalsIgnoreCase("is")) {
                 advance();
                 boolean negated = current.kind() == Token.Kind.NOT;
@@ -296,17 +350,19 @@ public final class SqlParser implements Parser {
         };
     }
 
-    /** Message for a clause word, or null when the spelling can be a normal name. */
+    /** Diagnostics and clause boundaries; supported keywords here are misplaced, not unsupported. */
     private static String clauseMessage(String text) {
         return switch (text.toLowerCase(Locale.ROOT)) {
-            case "as" -> "aliases are not supported";
-            case "join", "inner", "left", "right", "full", "cross", "outer", "natural", "on", "using" ->
-                    "JOIN is not supported";
-            case "order" -> "ORDER BY is not supported";
+            case "as" -> "column aliases are not supported";
+            case "full", "cross", "natural" -> "FULL, CROSS, and NATURAL JOIN are not supported";
+            case "using" -> "JOIN USING is not supported; use ON";
+            case "join", "inner", "left", "right", "outer", "on" ->
+                    "unexpected JOIN keyword; expected a two-table INNER/LEFT/RIGHT JOIN with ON";
             case "group" -> "GROUP BY is not supported";
             case "having" -> "HAVING is not supported";
             case "distinct" -> "DISTINCT is not supported";
-            case "limit", "offset", "fetch" -> "LIMIT is not supported";
+            case "offset" -> "OFFSET is not supported";
+            case "fetch" -> "FETCH is not supported";
             case "like" -> "LIKE is not supported";
             case "is" -> "unexpected IS; expected operand IS [NOT] NULL";
             case "in", "between", "exists", "case", "cast" -> "unsupported expression";

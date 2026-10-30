@@ -12,6 +12,9 @@ public interface BoundExpression {
 
     interface Predicate extends BoundExpression {}
 
+    /** Internal optimizer result; boolean is not a storage data type. */
+    record Constant(boolean value) implements Predicate {}
+
     /** Index refers to the input row; type comes from the catalog. */
     record Column(int index, DataType type) implements Scalar {}
 
@@ -32,4 +35,5 @@ public interface BoundExpression {
     record Or(Predicate left, Predicate right) implements Predicate {}
 
     record Not(Predicate child) implements Predicate {}
+    record IsNull(Scalar operand, boolean negated) implements Predicate {}
 }

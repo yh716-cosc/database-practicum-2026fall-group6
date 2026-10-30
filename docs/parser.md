@@ -4,8 +4,9 @@ This component turns one SQL statement into a `Query` tree. It checks syntax onl
 Table lookup, column binding, operand types, and row evaluation belong to the
 planner and executor. The parser does not read `.csv` or `.schema` files.
 
-Version 1 accepts one `SELECT` over one unaliased table, with an optional `WHERE`
-and an optional final semicolon. The statement must consume the whole string.
+The parser accepts one `SELECT` over one table or a two-table INNER/LEFT/RIGHT JOIN,
+with table aliases, optional WHERE/ORDER BY/LIMIT, and an optional final semicolon.
+See [JOIN syntax and semantics](join.md). The statement must consume the whole string.
 `docs/query-filtering.md` describes the larger single-table pipeline; this guide
 covers the parser that is implemented now.
 
@@ -36,13 +37,17 @@ Query
             Comparison(ColumnRef(null, "name"), NE, StringLiteral(""))
 ```
 
-Select-item aliases and the table alias are null. `where` is null when the
+Select-item aliases are null; table aliases are optional. `where` is null when the
 query has no filter. The select, from, and join lists are immutable snapshots.
 
 ## Grammar
 
 ```text
-query         := SELECT select_list FROM identifier [WHERE predicate] [;] EOF
+query         := SELECT select_list FROM table_ref [join_clause] [WHERE predicate]
+                 [ORDER BY sort_key (, sort_key)*] [LIMIT unsigned_integer] [;] EOF
+table_ref     := identifier [[AS] identifier]
+join_clause   := [INNER | LEFT [OUTER] | RIGHT [OUTER]] JOIN table_ref ON predicate
+sort_key      := column_ref [ASC | DESC]
 select_list   := * | column_ref (, column_ref)*
 predicate     := or_expr
 or_expr       := and_expr (OR and_expr)*
@@ -64,10 +69,11 @@ is preserved. Unqualified columns use a null table in `ColumnRef`.
 ## Literals, names, and whitespace
 
 - Identifiers match storage's `[A-Za-z_][A-Za-z0-9_]*`. `SELECT`, `FROM`,
+  `WHERE`, `AND`, `OR`, and `NOT` are reserved. Unquoted `NULL` is accepted only in `IS [NOT] NULL`.
   `WHERE`, `AND`, `OR`, and `NOT` are reserved. Unquoted `NULL` is accepted only
   in `IS [NOT] NULL`; `IS` is contextual and can still be a column name.
   A name such as `order` or `join` can still be a column or table; `ORDER BY`
-  and `JOIN` cannot.
+  and two-table INNER/LEFT/RIGHT JOIN are supported.
 - Integers are signed 32-bit values, including `-2147483648`. A sign must sit
   directly against the digits. Leading zeros are accepted and use the numeric
   value, so `007` is 7. Overflow is a parse error.
@@ -108,6 +114,9 @@ message describes the error and includes a 1-based line and column. The exceptio
 offset is not printed in the message. A tab counts as one column. Line breaks are `\n`,
 `\r\n`, or a bare `\r`.
 
+Rejected forms include FULL/CROSS/NATURAL/multiway joins, JOIN USING, column aliases, comma joins, `table.*`, `*` mixed
+with other select items, `GROUP BY`, `HAVING`, `DISTINCT`,
+aggregates, `OFFSET`, `LIKE`, standalone `NULL` literals, quoted identifiers, comments,
 Rejected forms include JOIN, aliases, more than one table, `table.*`, `*` mixed
 with other select items, `ORDER BY`, `GROUP BY`, `HAVING`, `DISTINCT`,
 aggregates, `LIMIT`, `LIKE`, standalone NULL literals, quoted identifiers, comments,
@@ -122,12 +131,12 @@ does not terminate the CLI. Separate sibling predicates do not accumulate levels
 ## Team integration
 
 - Engine.execute parses, plans, compiles an operator tree, and collects query results.
-- Planner validates the single-table subset, binds names, checks types, and expands
+- Planner validates the single-table/two-table INNER/LEFT/RIGHT equijoin subset, binds names, checks types, and expands
   star in schema order. String ordering can parse but fails planning.
 - Operators evaluate BoundExpression nodes produced by Planner. Both layers share
   ComparisonOp: EQ, NE, LT, LE, GT, and GE.
 - The CLI prints SqlParseException and PlanningException and reads the next line.
-  StorageException still propagates. Type quit or exit to leave.
+  StorageException is also displayed and the session continues. Type quit or exit to leave.
 - Parser nesting limits and Planner tree-depth limits are separate; see
   [planner.md](planner.md) for the latter.
 

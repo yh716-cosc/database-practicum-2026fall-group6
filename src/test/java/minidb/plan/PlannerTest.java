@@ -26,6 +26,20 @@ class PlannerTest {
         return (LogicalOperator.Project) planner.plan(new SqlParser().parse(sql), catalog);
     }
 
+    @Test void bindsSortToInputColumnsAndLimitsBeforeProjection() {
+        var project = plan("SELECT name FROM students WHERE age > 0 ORDER BY age DESC, id LIMIT 3");
+        assertEquals(List.of(1), project.columnIndexes());
+        var limit = assertInstanceOf(LogicalOperator.Limit.class, project.child());
+        assertEquals(3, limit.count());
+        var sort = assertInstanceOf(LogicalOperator.Sort.class, limit.child());
+        assertEquals(List.of(new LogicalOperator.SortKey(2, false),
+                new LogicalOperator.SortKey(0, true)), sort.keys());
+        assertInstanceOf(LogicalOperator.Filter.class, sort.child());
+        Query parsed = (Query) new SqlParser().parse("SELECT id FROM students");
+        assertThrows(PlanningException.class, () -> planner.plan(new Query(parsed.select(),
+                parsed.from(), parsed.joins(), null, List.of(), -1), catalog));
+    }
+
     @Test void bindsFilterBeforeProjectionAndPreservesSelectionOrder() {
         var result = plan("SELECT name, students.id, name FROM students WHERE age >= 18");
         assertEquals(List.of(1, 0, 1), result.columnIndexes());
@@ -75,7 +89,7 @@ class PlannerTest {
         List<Query> invalid = List.of(
             new Query(select, List.of(), List.of(), null),
             new Query(select, List.of(from.get(0), from.get(0)), List.of(), null),
-            new Query(select, List.of(new TableRef("students", "s")), List.of(), null),
+            new Query(select, List.of(new TableRef("students", "")), List.of(), null),
             new Query(select, from, List.of(new Join(from.get(0), null)), null),
             new Query(List.of(), from, List.of(), null),
             new Query(List.of(select.get(0), select.get(0)), from, List.of(), null),

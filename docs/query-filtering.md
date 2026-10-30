@@ -9,6 +9,8 @@ and scan/filter/project operators are connected through Engine. See the
 One table without aliases; SELECT star or ordered/repeated columns; optional WHERE;
 INTEGER and STRING operands; comparisons, NOT, AND, OR, and parentheses.
 Integer comparisons support all six operators; strings support only equality and
+inequality. No implicit conversion, SQL NULL, JOIN, grouping, aggregation,
+arithmetic, or writes through SQL. ORDER BY and LIMIT are now supported; see [sort and limit](sort-limit.md). Full grammar is in [parser.md](parser.md).
 inequality. Typed stored NULLs and IS NULL / IS NOT NULL are supported. No implicit
 conversion, standalone NULL literals, JOIN, sorting, grouping, aggregation,
 arithmetic, or writes through SQL. Full grammar is in [parser.md](parser.md).
@@ -62,7 +64,8 @@ LogicalOperator.Project([1])
 ```
 
 Filter precedes projection, so WHERE can reference omitted columns. Without
-WHERE, Planner omits Filter. Star expands in schema order. There is no optimizer.
+WHERE, Planner omits Filter. Star expands in schema order. Engine optimizes the
+bound plan before compiling it.
 See [planner.md](planner.md) for binding details and tree-depth limits.
 
 ## Execution and lifecycle
@@ -85,6 +88,7 @@ cleanup errors are suppressed on the original failure. Cleanup is attempted once
 Operators cover open failures even though Engine opens the root before its try block.
 
 Operators stream input, but Engine collects the entire result in QueryResult;
+memory therefore grows with output size. Result printing includes column names and raw values. Empty strings display as `""`; backslashes, line breaks, tabs, and pipes are escaped.
 memory therefore grows with output size. Result printing displays cell values,
 quotes strings, and prints typed NULLs as `NULL`.
 
@@ -94,10 +98,10 @@ quotes strings, and prints typed NULLs as `NULL`.
 | --- | --- | --- |
 | Syntax, unsupported SQL | SqlParseException | Print error and accept next line |
 | Unknown column/qualifier, type error, unsupported AST | PlanningException | Print error and accept next line |
-| Missing table files, malformed schema/CSV, I/O | StorageException | Propagates and ends the session |
+| Missing table files, malformed schema/CSV, I/O | StorageException | Print error and accept next line |
 
 Catalog failures during planning also retain StorageException. Malformed rows
-are never silently skipped. Storage error recovery in the CLI is future work.
+are never silently skipped. The CLI catches storage errors and continues accepting statements.
 
 ## Verification
 
@@ -117,6 +121,22 @@ CLI recovery after parse/planning errors.
 ## Future extensions
 
 JOIN requires alias/ambiguity handling and column positions for combined rows.
-ORDER BY and GROUP BY need separate operators and plans. Improving output format,
-recovering from storage errors, and streaming final results can be tackled without
+GROUP BY needs a separate operator and plan; ORDER BY uses SortOperator. Further output formatting,
+and streaming final results can be tackled without
 expanding SQL syntax. See [project updates](../CHANGELOG.md) for the current milestone.
+
+## Rule-based optimizer v1
+
+`Optimizer.optimize(plan)` rewrites fully bound, type-checked plans without storage
+reads or input mutation. Engine invokes it between Planner and Executor. Rules
+fold literal comparisons, simplify constant AND/OR/NOT branches, remove double
+negation and always-true filters, and compose consecutive projections while
+preserving column order and repeats. Internal boolean constants are predicates,
+not a SQL or storage data type.
+
+Always-false filters retain their child scan so malformed CSV still raises
+StorageException. All branches are validated before optimization, including
+unreachable branches. Row order and duplicates are unchanged. There is no cost
+model, JOIN reordering, predicate pushdown, or storage-level column pruning.
+Current single-table plans already place filters below projections; future
+pushdown rules must account for column-index remapping.

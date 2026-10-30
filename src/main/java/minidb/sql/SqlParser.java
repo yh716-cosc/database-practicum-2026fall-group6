@@ -157,6 +157,13 @@ public final class SqlParser implements Parser {
 
         private Expression comparison() {
             Expression left = operand();
+            if (current.kind() == Token.Kind.IDENTIFIER && current.text().equalsIgnoreCase("is")) {
+                advance();
+                boolean negated = current.kind() == Token.Kind.NOT;
+                if (negated) advance();
+                expect(Token.Kind.NULL, "NULL");
+                return new Expression.IsNull(left, negated);
+            }
             Expression.ComparisonOp op = comparisonOp(current.kind());
             if (op == null) {
                 throw unexpected("comparison operator");
@@ -301,7 +308,7 @@ public final class SqlParser implements Parser {
             case "distinct" -> "DISTINCT is not supported";
             case "limit", "offset", "fetch" -> "LIMIT is not supported";
             case "like" -> "LIKE is not supported";
-            case "is" -> "SQL NULL is not supported";
+            case "is" -> "unexpected IS; expected operand IS [NOT] NULL";
             case "in", "between", "exists", "case", "cast" -> "unsupported expression";
             case "union", "except", "intersect" -> "set operations are not supported";
             case "insert", "update", "delete", "create", "drop", "alter", "into", "values", "set" ->

@@ -34,6 +34,7 @@ public final class QueryResult {
     }
 
     private static String formatValue(Value value) {
+        if (value.isNull()) return "NULL";
         if (value.type() == DataType.STRING) {
             return "'" + value.raw() + "'";
         }

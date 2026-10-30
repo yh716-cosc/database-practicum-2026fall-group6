@@ -22,7 +22,7 @@ public final class StorageDemo {
         Table table = new Table("students", List.of(
                 new Column("id", DataType.INTEGER), new Column("name", DataType.STRING)));
         TableStore store = new DirectoryTableStore(directory);
-        store.write(table, List.of(row(1, "Alice"), row(2, "Smith, Bob"), row(3, "Zoë \"Z\"")));
+        store.write(table, List.of(row(1, "Alice"), row(2, "Smith, Bob"), row(3, "Zoë \"Z\""), row(4, null)));
         System.out.println("Wrote students.csv and students.schema to " + directory);
         System.out.println("Schema: " + new DirectoryCatalog(directory).getTable("students"));
         try (RowCursor cursor = store.scan("students")) {
@@ -32,6 +32,7 @@ public final class StorageDemo {
                 System.out.println(row.values());
             }
         }
+        System.out.println("Statistics: " + store.statistics("students"));
     }
 
     private static Row row(int id, String name) {

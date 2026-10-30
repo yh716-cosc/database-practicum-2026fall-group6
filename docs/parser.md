@@ -48,7 +48,7 @@ predicate     := or_expr
 or_expr       := and_expr (OR and_expr)*
 and_expr      := not_expr (AND not_expr)*
 not_expr      := NOT not_expr | '(' predicate ')' | comparison
-comparison    := operand comparison_op operand
+comparison    := operand (comparison_op operand | IS [NOT] NULL)
 operand       := column_ref | signed_integer | string_literal
 column_ref    := identifier ['.' identifier]
 comparison_op := '=' | '<>' | '<' | '<=' | '>' | '>='
@@ -64,7 +64,8 @@ is preserved. Unqualified columns use a null table in `ColumnRef`.
 ## Literals, names, and whitespace
 
 - Identifiers match storage's `[A-Za-z_][A-Za-z0-9_]*`. `SELECT`, `FROM`,
-  `WHERE`, `AND`, `OR`, and `NOT` are reserved. Unquoted `NULL` is rejected.
+  `WHERE`, `AND`, `OR`, and `NOT` are reserved. Unquoted `NULL` is accepted only
+  in `IS [NOT] NULL`; `IS` is contextual and can still be a column name.
   A name such as `order` or `join` can still be a column or table; `ORDER BY`
   and `JOIN` cannot.
 - Integers are signed 32-bit values, including `-2147483648`. A sign must sit
@@ -91,6 +92,7 @@ inside `sql/ast/Expression.java`:
 | `= <> < <= > >=` | `ComparisonOp.EQ, NE, LT, LE, GT, GE` |
 | comparison | `Expression.Comparison` |
 | `AND` / `OR` / `NOT` | `Expression.And`, `Or`, `Not` |
+| `operand IS [NOT] NULL` | `Expression.IsNull(operand, negated)` |
 | lone `*` | `Expression.Star` as the only `SelectItem` |
 | `students.age` / `age` | existing `ColumnRef` |
 
@@ -108,7 +110,7 @@ offset is not printed in the message. A tab counts as one column. Line breaks ar
 
 Rejected forms include JOIN, aliases, more than one table, `table.*`, `*` mixed
 with other select items, `ORDER BY`, `GROUP BY`, `HAVING`, `DISTINCT`,
-aggregates, `LIMIT`, `LIKE`, unquoted SQL `NULL`, quoted identifiers, comments,
+aggregates, `LIMIT`, `LIKE`, standalone NULL literals, quoted identifiers, comments,
 arithmetic, subqueries, updates, chained comparisons such as `age < 20 < 30`,
 and a second statement after the semicolon.
 

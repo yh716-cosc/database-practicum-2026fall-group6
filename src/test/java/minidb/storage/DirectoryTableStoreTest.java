@@ -197,10 +197,10 @@ class DirectoryTableStoreTest {
     }
 
     @Test
-    void rejectsNullCellsWrongWidthsAndDeclaredTypes() {
+    void rejectsMissingCellsWrongWidthsAndDeclaredTypes() {
         TableStore store = new DirectoryTableStore(directory);
         for (Row invalid : List.of(new Row(List.of()),
-                new Row(List.of(new Value(DataType.INTEGER, 1), new Value(DataType.STRING, null))),
+                new Row(java.util.Arrays.asList(new Value(DataType.INTEGER, 1), null)),
                 new Row(List.of(new Value(DataType.INTEGER, 1), new Value(DataType.STRING, 2))),
                 new Row(List.of(new Value(DataType.STRING, "1"), new Value(DataType.STRING, "A"))))) {
             assertThrows(StorageException.class, () -> store.write(STUDENTS, List.of(invalid)));
@@ -241,6 +241,11 @@ class DirectoryTableStoreTest {
             }
             if (seen != count) {
                 throw new AssertionError("Expected " + count + " rows, found " + seen);
+            }
+            TableStatistics statistics = store.analyze("students");
+            if (statistics.rowCount() != count || statistics.columns().get("name").distinctCount() != 1
+                    || Math.abs(statistics.columns().get("id").distinctCount() - count) > count * 0.15) {
+                throw new AssertionError("Incorrect streaming statistics: " + statistics);
             }
         }
     }

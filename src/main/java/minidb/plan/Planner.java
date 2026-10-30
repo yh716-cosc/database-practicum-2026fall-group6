@@ -98,6 +98,9 @@ public final class Planner {
         BoundExpression.Predicate predicate(Expression expression, int depth) {
             // Flat AND/OR chains also create deep trees; fail before recursive binding overflows.
             if (depth > 256) throw new PlanningException("Predicate tree exceeds depth limit of 256");
+            if (expression instanceof Expression.IsNull check) {
+                return new BoundExpression.IsNull(scalar(check.operand()), check.negated());
+            }
             if (expression instanceof Expression.And and) {
                 return new BoundExpression.And(predicate(and.left(), depth + 1), predicate(and.right(), depth + 1));
             }

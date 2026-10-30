@@ -31,14 +31,14 @@ ID 4; and ID 6, respectively. The final semicolon is optional.
 Type `quit` or `exit` to leave. Multiline statements and multiple statements on
 one line are not supported by the CLI.
 
-Output currently displays Java values, for example:
+Output displays cell values, for example:
 
 ```text
-[Value[type=INTEGER, raw=4]]
+4
 (1 rows)
 ```
 
-`raw` is the cell value. See [shared sample queries](local-test-data/README.md)
+Strings are quoted; typed NULLs print as `NULL`. See [shared sample queries](local-test-data/README.md)
 for additional inputs and expected results.
 
 ## Supported SQL
@@ -48,13 +48,14 @@ for additional inputs and expected results.
 - INTEGER comparisons: `=`, `<>`, `<`, `<=`, `>`, `>=`.
 - STRING comparisons: `=` and `<>`, with exact case-sensitive matching.
 - `NOT`, `AND`, `OR`, and parentheses. Precedence: comparison, NOT, AND, OR.
+- `column IS NULL` / `IS NOT NULL`; NULL comparisons use SQL three-valued logic.
 - Bare column names or actual table qualifiers, such as `students.age`.
 - Case-insensitive SQL keywords; case-sensitive table and column names.
 - Signed 32-bit integers; single-quoted strings with doubled quote escaping.
 
 No implicit type conversion: `age = '18'` is a planning error.
 JOIN, aliases, multiple tables, ORDER BY, GROUP BY, aggregates, DISTINCT, LIMIT,
-LIKE, SQL NULL, arithmetic, comments, subqueries, and SQL writes are unsupported.
+LIKE, standalone NULL literals, arithmetic, comments, subqueries, and SQL writes are unsupported.
 `table.*` and mixing `*` with other selected columns are also unsupported.
 
 ## Use your own tables
@@ -87,6 +88,13 @@ java -jar target/minidb-0.1.0.jar data
 
 Prepare the files before starting queries; there is no SQL CREATE TABLE or INSERT.
 See [storage formats and API](docs/storage.md) for quoting and validation rules.
+Existing unmarked tables preserve their original field meanings. New tables written
+through storage use a versioned NULL encoding: `\N` is typed NULL, and a literal
+leading backslash is doubled. Empty STRINGs and literal `NULL` remain distinct.
+Storage also exposes lazy `statistics(table)` and forced-refresh `analyze(table)`
+operations with exact row/NULL counts and bounded-memory distinct counts. See
+[statistics and external edits](docs/storage.md#table-statistics-and-external-edits)
+for cache invalidation rules, including timestamp-preserving external edits.
 
 ## Architecture and status
 
@@ -134,7 +142,7 @@ mvn -q test
 mvn -q "-Dtest=PlannerTest,ExecutorTest,EngineTest,CliTest" test
 ```
 
-The latest verified suite on 2026-10-11 has 170 passing tests. Tests cover parsing,
+The suite covers parsing,
 planning, operator lifecycle and cleanup, storage, full SQL results, and CLI
 recovery after syntax/planning errors. Tests create their own fixtures; shared
 samples are for manual verification.
@@ -168,7 +176,7 @@ local-test-data/         shared manual-test table and expected results
 
 ## Next work
 
-Improve result formatting and CLI handling of storage errors; consider streaming
+Improve column headers and CLI handling of storage errors; consider streaming
 result output for large queries. Design JOIN, sorting, or aggregation according to
 course requirements before extending the current subset.
 

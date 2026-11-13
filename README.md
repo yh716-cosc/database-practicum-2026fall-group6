@@ -52,14 +52,25 @@ ID 4; and ID 6, respectively. The final semicolon is optional.
 Type `quit` or `exit` to leave. Multiline statements and multiple statements on
 one line are not supported by the CLI.
 
+Inspect and refresh table statistics at the same prompt:
+
+```text
+.stats students
+.analyze students
+```
+
+`.stats` collects statistics on first use or after detected file changes, otherwise
+reusing the current session's cache. `.analyze` always scans every record; use it
+after external edits that preserve file size and timestamps. Both commands print
+row count, CSV bytes, collection time, and each column's NULL and distinct non-null
+counts, labeled `exact` or `estimated`. Commands are case-insensitive; table names
+remain case-sensitive. A final semicolon is optional. Errors return to the prompt.
+
 Output displays column names and cell values, for example:
 
 ```text
 id
 --
-Output displays cell values, for example:
-
-```text
 4
 (1 rows)
 ```
@@ -130,7 +141,9 @@ Existing unmarked tables preserve their original field meanings. New tables writ
 through storage use a versioned NULL encoding: `\N` is typed NULL, and a literal
 leading backslash is doubled. Empty STRINGs and literal `NULL` remain distinct.
 Storage also exposes lazy `statistics(table)` and forced-refresh `analyze(table)`
-operations with exact row/NULL counts and bounded-memory distinct counts. See
+operations with exact row/NULL counts and bounded-memory distinct counts, plus
+`cachedStatistics(table)` to inspect a current cache entry without scanning data.
+These APIs are also available on `Engine`, sharing its storage cache. See
 [statistics and external edits](docs/storage.md#table-statistics-and-external-edits)
 for cache invalidation rules, including timestamp-preserving external edits.
 
@@ -217,11 +230,10 @@ local-test-data/         shared manual-test table and expected results
 
 ## Next work
 
-Consider streaming
-result output for large queries. Design JOIN or aggregation according to
-Improve column headers and CLI handling of storage errors; consider streaming
-result output for large queries. Design JOIN, sorting, or aggregation according to
-course requirements before extending the current subset.
+Consider temporary row storage for external sorting and streaming result output
+for large queries. Cached statistics are available for future planning tools;
+the current optimizer does not use them. Design aggregation according to course
+requirements before extending the current subset.
 
 ## Group
 

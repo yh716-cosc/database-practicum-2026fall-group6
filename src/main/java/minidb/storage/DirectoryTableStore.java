@@ -12,6 +12,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVPrinter;
@@ -64,17 +65,38 @@ public final class DirectoryTableStore implements TableStore {
         return collectStatistics(tableName, true);
     }
 
+    @Override
+    public synchronized Optional<TableStatistics> cachedStatistics(String tableName) {
+        SchemaFiles.validateName(tableName);
+        CachedStatistics cached = statistics.get(tableName);
+        if (cached == null) return Optional.empty();
+        try {
+            if (cached.fingerprint().equals(fingerprint(tableName))) {
+                return Optional.of(cached.value());
+            }
+        } catch (IOException | RuntimeException e) {
+            // An optional planning hint must not force a scan or mask later query errors.
+        }
+        statistics.remove(tableName);
+        return Optional.empty();
+    }
+
+    private Fingerprint fingerprint(String tableName) throws IOException {
+        FileStamp csv = stamp(dataDir.resolve(tableName + ".csv"));
+        FileStamp schema = stamp(dataDir.resolve(tableName + ".schema"));
+        TableDefinition definition = catalog.getTableDefinition(tableName);
+        SchemaFiles.validate(definition.table());
+        // Snapshot caller-owned column lists, just as scan() does.
+        definition = new TableDefinition(new Table(tableName,
+                List.copyOf(definition.table().columns())), definition.format());
+        return new Fingerprint(csv, schema, definition);
+    }
+
     private TableStatistics collectStatistics(String tableName, boolean force) {
         SchemaFiles.validateName(tableName);
         try {
-            FileStamp csvBefore = stamp(dataDir.resolve(tableName + ".csv"));
-            FileStamp schemaBefore = stamp(dataDir.resolve(tableName + ".schema"));
-            TableDefinition definition = catalog.getTableDefinition(tableName);
-            // Snapshot caller-owned column lists, just as scan() does.
-            SchemaFiles.validate(definition.table());
-            definition = new TableDefinition(new Table(tableName,
-                    List.copyOf(definition.table().columns())), definition.format());
-            Fingerprint before = new Fingerprint(csvBefore, schemaBefore, definition);
+            Fingerprint before = fingerprint(tableName);
+            TableDefinition definition = before.definition();
             CachedStatistics cached = statistics.get(tableName);
             if (!force && cached != null && before.equals(cached.fingerprint())) {
                 return cached.value();
@@ -86,13 +108,13 @@ public final class DirectoryTableStore implements TableStore {
                 Row row;
                 while ((row = cursor.next()) != null) collector.add(row);
             }
-            if (!csvBefore.equals(stamp(dataDir.resolve(tableName + ".csv")))
-                    || !schemaBefore.equals(stamp(dataDir.resolve(tableName + ".schema")))
+            if (!before.csv().equals(stamp(dataDir.resolve(tableName + ".csv")))
+                    || !before.schema().equals(stamp(dataDir.resolve(tableName + ".schema")))
                     || !definition.equals(catalog.getTableDefinition(tableName))) {
                 throw new StorageException("Table changed during statistics collection: " + tableName
                         + "; finish editing and analyze again");
             }
-            TableStatistics result = collector.finish(csvBefore.size());
+            TableStatistics result = collector.finish(before.csv().size());
             statistics.put(tableName, new CachedStatistics(before, result));
             return result;
         } catch (IOException | RuntimeException e) {

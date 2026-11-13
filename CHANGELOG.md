@@ -1,5 +1,16 @@
 # Project updates
 
+## 2026-11-13 — Statistics commands and cached-only access
+
+- Add `.stats <table>` and `.analyze <table>` at the CLI prompt, with explicit
+  full-scan/cache messages, row and NULL counts, CSV size, collection time, and
+  distinct counts labeled exact or estimated.
+- Expose statistics operations through Engine, sharing its query storage cache.
+- Add optional cached-only lookup that checks file/schema metadata without reading
+  CSV rows; stale or unavailable entries are evicted without automatic collection.
+- Retain forced refresh for metadata-preserving edits and prompt recovery after
+  malformed commands or failed collection. Ordinary queries do not collect stats.
+
 ## 2026-10-30 — Repair nullable-storage/JOIN merge
 
 - Remove duplicated predicate methods, IsNull records, and malformed test nesting.

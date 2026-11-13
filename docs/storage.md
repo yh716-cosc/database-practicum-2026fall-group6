@@ -169,8 +169,28 @@ before running queries.
 
 ## Table statistics and external edits
 
-Statistics are optional Java storage API operations; there is no SQL ANALYZE
-statement, persistent `.stats` file, or optimizer integration yet:
+Statistics are available through the Java storage API, `Engine`, and CLI commands.
+The CLI accepts these commands, one per line, alongside SQL and English queries:
+
+```text
+.stats students
+.analyze students
+```
+
+`.stats` reuses a matching cache entry or announces a full scan to collect/refresh
+statistics. `.analyze` announces and forces a full scan, including when size and
+timestamps are unchanged. Both display table name, row count, CSV bytes, UTC
+collection time, and columns in schema order with type, NULL count, distinct
+non-null count, and an `exact`/`estimated` label. Empty/all-NULL tables display zero
+distinct values. Command names ignore case, table names do not, and a trailing
+semicolon is optional. Invalid syntax or storage errors print a message and leave
+the prompt usable; a failed collection never displays stale statistics.
+
+The cache belongs to the engine's store for the life of the session. The commands
+do not write data or persistent statistics files. `.analyze` is a CLI command;
+there is no SQL ANALYZE statement or automatic optimizer integration yet.
+
+Java API:
 
 ```java
 TableStore store = new DirectoryTableStore(Path.of("data"));
@@ -183,7 +203,24 @@ boolean exact = names.distinctCountExact();
 
 // Force a fresh complete scan after an external edit, regardless of timestamps.
 TableStatistics refreshed = store.analyze("students");
+
+// Optional advisory metadata: never opens a CSV row cursor or collects statistics.
+Optional<TableStatistics> cached = store.cachedStatistics("students");
 ```
+
+Import `java.util.Optional` for the last example. `Engine.statistics`,
+`Engine.analyze`, and `Engine.cachedStatistics` delegate to the same store used by
+queries, so CLI commands and Java callers share snapshots. Normal SQL execution
+does not collect statistics.
+
+`cachedStatistics` returns an existing snapshot only while file metadata and the
+parsed schema/format still match. It reads filesystem/schema metadata, never CSV
+records. Uncollected, stale, missing-file, or invalid-metadata entries return
+`Optional.empty()`; stale/unavailable entries are evicted. It never falls back to
+collecting statistics. Invalid table identifiers still raise `StorageException`.
+The method is suitable for optional planning hints, and remains subject to the
+metadata-preserving edit limitation below. Stores without a statistics cache
+default to returning empty.
 
 Both methods fully parse and validate every record when collecting; they return
 exact row counts (excluding the header), per-column NULL counts, CSV byte size,
@@ -203,6 +240,7 @@ Collection and refresh policy:
 - Reads and writes do not automatically collect statistics. The first
   `statistics(name)` call performs a full scan and caches the result in that store
   instance. A fresh store collects again; partial scans never produce row counts.
+  `.stats` uses this behavior, while `.analyze` calls the forced refresh API.
 - Before reusing a cache entry, `statistics` checks both CSV and schema file sizes,
   full-resolution modification times, creation times, file identities (where the
   filesystem supplies them), and the current parsed table definition. Changes
@@ -234,8 +272,8 @@ Collection and refresh policy:
   Filtering, projection, joins, sorting, and grouping belong above storage.
 - Each call to `scan()` creates its own file position, including scans of the same
   table. This supports repeated scans and self-joins.
-- The CLI prints `SqlParseException` and `PlanningException`, then reads the
-  next line. `StorageException` still propagates and ends the CLI session.
+- The CLI prints SQL, English-command, planning, and storage errors, then reads
+  the next line. Statistics-command failures use the same recovery path.
 - `Engine` still accumulates output rows in `QueryResult`. Streaming storage does
   not yet make the entire query pipeline bounded in memory.
 

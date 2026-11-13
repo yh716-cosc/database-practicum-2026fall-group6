@@ -2,6 +2,7 @@ package minidb;
 
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Optional;
 
 import minidb.catalog.Catalog;
 import minidb.catalog.DirectoryCatalog;
@@ -17,6 +18,7 @@ import minidb.sql.ast.Statement;
 import minidb.storage.DirectoryTableStore;
 import minidb.storage.Row;
 import minidb.storage.TableStore;
+import minidb.storage.TableStatistics;
 
 /** Parse a query, plan it, then pull rows from the root operator. */
 public final class Engine {
@@ -49,6 +51,21 @@ public final class Engine {
         } finally {
             root.close();
         }
+    }
+
+    /** Collect statistics if absent or stale, sharing the query engine's storage cache. */
+    public TableStatistics statistics(String tableName) {
+        return store.statistics(tableName);
+    }
+
+    /** Force a full validation and refresh, including metadata-preserving external edits. */
+    public TableStatistics analyze(String tableName) {
+        return store.analyze(tableName);
+    }
+
+    /** Inspect current cached statistics without reading CSV data rows. */
+    public Optional<TableStatistics> cachedStatistics(String tableName) {
+        return store.cachedStatistics(tableName);
     }
 
     /** Output labels follow the logical row layout, including repeated columns. */

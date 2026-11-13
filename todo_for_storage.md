@@ -16,17 +16,13 @@ Completed:
 - [x] Provide lazy row/NULL counts and exact small / estimated large distinct
   counts. Refresh automatically on detected external file changes, and expose
   forced `analyze` for edits preserving file metadata. See docs/storage.md.
+- [x] Expose `.stats` / `.analyze` in the CLI and statistics access on Engine.
+  Provide cached-only metadata lookup for future planning without scanning rows.
+- [x] CLI storage-error recovery and result column headers are merged on main.
 
-Questions for the first demo, in priority order:
+Remaining demo question:
 
-1. Should the CLI recover from `StorageException` as it already does for syntax
-   and planning errors? A nonexistent table, mismatched header, or bad integer
-   currently terminates the session. Add CLI tests for continuing with a valid
-   query after each failure.
-2. Should results include column headers? Current output displays plain values
-   and quoted strings. Coordinate headers with the teammate who owns `QueryResult`
-   and CLI output; the newer filter branch already implements them.
-3. Does the demo need large result sets, or only large input scans? Storage and
+1. Does the demo need large result sets, or only large input scans? Storage and
    scan/filter/project stream, but `Engine` accumulates all selected rows in
    `QueryResult`. Streaming output is a separate change if large results are part
    of the demo; the existing constrained-heap storage test already verifies large

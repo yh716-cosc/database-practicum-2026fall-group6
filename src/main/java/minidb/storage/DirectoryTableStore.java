@@ -23,6 +23,9 @@ import minidb.catalog.DirectoryCatalog;
 import minidb.catalog.SchemaFiles;
 import minidb.catalog.Table;
 import minidb.catalog.TableDefinition;
+import minidb.index.BPlusTreeWriter;
+import minidb.index.KeyRange;
+import minidb.types.DataType;
 import minidb.types.Value;
 
 /** Streaming CSV storage with explicit schemas. Write new tables between query runs. */
@@ -134,6 +137,96 @@ public final class DirectoryTableStore implements TableStore {
     private record FileStamp(long size, FileTime modified, FileTime created, Object fileKey) {}
     private record Fingerprint(FileStamp csv, FileStamp schema, TableDefinition definition) {}
     private record CachedStatistics(Fingerprint fingerprint, TableStatistics value) {}
+
+    @Override
+    public RowCursor indexScan(String tableName, String column, KeyRange range) {
+        SchemaFiles.validateName(tableName);
+        Objects.requireNonNull(range, "range");
+        TableDefinition definition = catalog.getTableDefinition(tableName);
+        Table table = definition.table();
+        SchemaFiles.validate(table);
+        if (!catalog.indexedColumns(tableName).contains(column)) {
+            throw new StorageException("No index on " + tableName + "." + column);
+        }
+        table = new Table(tableName, List.copyOf(table.columns()));
+        int position = table.columns().stream().map(Column::name).toList().indexOf(column);
+        return new IndexedRowCursor(dataDir.resolve(tableName + ".csv"),
+                CsvIndexes.indexPath(dataDir, tableName, column), table, definition.format(),
+                position, range);
+    }
+
+    @Override
+    public boolean createIndex(String name, String tableName, String column) {
+        SchemaFiles.validateName(name);
+        if (name.length() > BPlusTreeWriter.MAX_NAME_LENGTH) {
+            throw new StorageException("Index name is longer than " + BPlusTreeWriter.MAX_NAME_LENGTH
+                    + " characters: " + name);
+        }
+        SchemaFiles.validateName(tableName);
+        TableDefinition definition = catalog.getTableDefinition(tableName);
+        Table table = definition.table();
+        SchemaFiles.validate(table);
+        table = new Table(tableName, List.copyOf(table.columns()));
+        int position = table.columns().stream().map(Column::name).toList().indexOf(column);
+        if (position < 0) {
+            throw new StorageException("Unknown column: " + tableName + "." + column);
+        }
+        if (table.columns().get(position).type() != DataType.INTEGER) {
+            throw new StorageException("Only INTEGER columns can be indexed; " + tableName + "."
+                    + column + " is " + table.columns().get(position).type());
+        }
+        Path index = CsvIndexes.indexPath(dataDir, tableName, column);
+        Path sameName = CsvIndexes.findByName(dataDir, name).orElse(null);
+        if (sameName != null && !sameName.getFileName().equals(index.getFileName())) {
+            String target = sameName.getFileName().toString().replaceFirst("\\.idx$", "");
+            throw new StorageException("Index " + name + " already exists on " + target);
+        }
+        String existing = CsvIndexes.nameOf(index).orElse(name);
+        if (!existing.equals(name)) {
+            throw new StorageException("Column " + tableName + "." + column + " is already indexed by "
+                    + existing + "; DROP INDEX " + existing + " first");
+        }
+        return CsvIndexes.build(dataDir.resolve(tableName + ".csv"), index, table,
+                definition.format(), position, name);
+    }
+
+    @Override
+    public List<IndexListing> listIndexes() {
+        List<IndexListing> listings = new ArrayList<>();
+        for (Path index : CsvIndexes.indexFiles(dataDir)) {
+            String[] owner = CsvIndexes.tableAndColumn(index);
+            String name = CsvIndexes.nameOf(index).orElse(null);
+            IndexListing.Status status = name == null ? IndexListing.Status.UNREADABLE
+                    : isFresh(owner[0], owner[1], index) ? IndexListing.Status.FRESH
+                    : IndexListing.Status.STALE;
+            listings.add(new IndexListing(name, owner[0], owner[1], status));
+        }
+        return List.copyOf(listings);
+    }
+
+    /** Same test the catalog uses before planning an index scan; a missing table or column is stale. */
+    private boolean isFresh(String tableName, String column, Path index) {
+        try {
+            List<Column> columns = catalog.getTable(tableName).columns();
+            int position = columns.stream().map(Column::name).toList().indexOf(column);
+            return position >= 0 && columns.get(position).type() == DataType.INTEGER
+                    && CsvIndexes.isFresh(dataDir.resolve(tableName + ".csv"), index, position);
+        } catch (RuntimeException missingOrInvalidTable) {
+            return false;
+        }
+    }
+
+    @Override
+    public void dropIndex(String name) {
+        SchemaFiles.validateName(name);
+        Path index = CsvIndexes.findByName(dataDir, name)
+                .orElseThrow(() -> new StorageException("Unknown index: " + name));
+        try {
+            Files.delete(index);
+        } catch (IOException e) {
+            throw new StorageException("Cannot delete index " + index, e);
+        }
+    }
 
     @Override
     public void write(Table table, Iterable<Row> rows) {

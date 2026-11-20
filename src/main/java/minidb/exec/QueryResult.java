@@ -11,6 +11,7 @@ import minidb.types.Value;
 public final class QueryResult {
     private final List<Row> rows = new ArrayList<>();
     private final List<String> columnNames;
+    private String message;
 
     public QueryResult() {
         this(List.of());
@@ -18,6 +19,18 @@ public final class QueryResult {
 
     public QueryResult(List<String> columnNames) {
         this.columnNames = List.copyOf(columnNames);
+    }
+
+    /** Result of a command such as CREATE INDEX: no rows, just a status line. */
+    public static QueryResult message(String message) {
+        QueryResult result = new QueryResult();
+        result.message = message;
+        return result;
+    }
+
+    /** The status line of a command, or null for a query. */
+    public String message() {
+        return message;
     }
 
     public List<String> columnNames() {
@@ -33,6 +46,10 @@ public final class QueryResult {
     }
 
     public void printTo(PrintStream out) {
+        if (message != null) {
+            out.println(message);
+            return;
+        }
         if (!columnNames.isEmpty()) {
             out.println(String.join(" | ", columnNames.stream().map(QueryResult::display).toList()));
             out.println(String.join("-+-", columnNames.stream()

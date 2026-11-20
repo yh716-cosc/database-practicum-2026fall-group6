@@ -5,6 +5,10 @@ import java.util.List;
 /** Logical steps produced by the planner and compiled by the executor. */
 public interface LogicalOperator {
     record Scan(String tableName) implements LogicalOperator {}
+
+    /** Rows of the table whose indexed column is in range, in scan order. Same layout as Scan. */
+    record IndexScan(String tableName, String column, minidb.index.KeyRange range)
+            implements LogicalOperator {}
     record Join(LogicalOperator left, LogicalOperator right, BoundExpression.Predicate condition,
                 minidb.sql.ast.Join.Type type, List<minidb.types.DataType> leftTypes,
                 List<minidb.types.DataType> rightTypes) implements LogicalOperator {

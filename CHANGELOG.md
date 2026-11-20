@@ -19,6 +19,26 @@
 - Make nullable schema/output assertions portable across LF and CRLF platforms.
 - Reconcile supported-query and nullable-storage documentation.
 
+## 2026-10-30 — Unclustered B+ tree indexes
+
+- Add `CREATE INDEX name ON table (column)` for INTEGER columns; the CLI prints
+  `Created index ...` or, for an existing index, `Rebuilt index ...`.
+- Add `DROP INDEX name`, which finds the index file by the name in its header and
+  deletes it. CREATE INDEX now rejects a name used on another column and a second
+  name on an already indexed column.
+- Add `SHOW INDEXES`, which lists each index file's name, table, column, and status
+  (`fresh`, `stale`, or `unreadable`), so forgotten names can be passed to DROP INDEX.
+- Bulk-load page-based B+ tree files (`<table>.<column>.idx`) keyed by column value,
+  with CSV record byte offsets as rids. Only CREATE INDEX builds them; queries ignore
+  an index whose CSV has changed and scan the table instead.
+- Optimizer rewrites `Filter(Scan)` to `Filter(IndexScan)` for `=`, `<`, `<=`, `>`, `>=`
+  conjuncts against literals; the full predicate is still applied.
+- Index scans return rows in file order, so results match full scans exactly.
+- Share CSV record conversion between scans, index builds, and index fetches.
+- See docs/indexing.md for the file format, rules, and limits.
+- Add psql-style `\timing [on|off]` to the CLI; when on, each successful statement
+  is followed by `Time: <ms> ms` (parse, plan, and execution; printing excluded).
+
 ## LEFT and RIGHT JOIN extension
 
 - Parse LEFT/RIGHT JOIN with optional OUTER and preserve the logical column layout.

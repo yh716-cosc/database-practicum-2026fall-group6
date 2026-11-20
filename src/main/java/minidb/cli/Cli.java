@@ -3,6 +3,7 @@ package minidb.cli;
 import java.io.PrintStream;
 import java.util.Locale;
 import java.util.Scanner;
+import java.util.regex.Pattern;
 
 import minidb.Engine;
 import minidb.command.EnglishCommandException;
@@ -15,8 +16,12 @@ import minidb.storage.TableStatistics;
 
 /** Reads queries and statistics commands, one per line. Table data stays read-only. */
 public final class Cli {
+    private static final Pattern SHOW_INDEXES =
+            Pattern.compile("(?i)show\\s+index(es)?\\s*;?");
+
     private final Engine engine;
     private final EnglishCommandTranslator englishTranslator = new EnglishCommandTranslator();
+    private boolean timing;
 
     public Cli(Engine engine) {
         this.engine = engine;
@@ -45,14 +50,23 @@ public final class Cli {
             if (line.equalsIgnoreCase("quit") || line.equalsIgnoreCase("exit")) {
                 break;
             }
+            if (line.startsWith("\\")) {
+                handleMetaCommand(line, output);
+                continue;
+            }
             try {
                 if (line.startsWith(".")) {
                     statisticsCommand(line, output);
                     continue;
                 }
+                long start = System.nanoTime();
                 String sql = isEnglishCommand(line) ? englishTranslator.translate(line) : line;
                 QueryResult result = engine.execute(sql);
+                long elapsed = System.nanoTime() - start;
                 result.printTo(output);
+                if (timing) {
+                    output.println(String.format(Locale.ROOT, "Time: %.3f ms", elapsed / 1e6));
+                }
             } catch (EnglishCommandException | SqlParseException | PlanningException
                     | StorageException ex) {
                 output.println(ex.getMessage());
@@ -104,8 +118,30 @@ public final class Cli {
                 + " | " + (column.distinctCountExact() ? "exact" : "estimated")));
     }
 
+    /** "show ..." is controlled English, except the SQL statement SHOW INDEX(ES). */
     private static boolean isEnglishCommand(String input) {
         return input.regionMatches(true, 0, "show", 0, 4)
-                && (input.length() == 4 || Character.isWhitespace(input.charAt(4)));
+                && (input.length() == 4 || Character.isWhitespace(input.charAt(4)))
+                && !SHOW_INDEXES.matcher(input).matches();
+    }
+
+    /** Handles backslash commands; only {@code \timing [on|off]} is supported. */
+    private void handleMetaCommand(String line, PrintStream output) {
+        String[] parts = line.replaceFirst(";+$", "").trim().split("\\s+");
+        if (!parts[0].equalsIgnoreCase("\\timing") || parts.length > 2) {
+            output.println("Invalid command " + parts[0] + ".");
+            return;
+        }
+        if (parts.length == 1) {
+            timing = !timing;
+        } else if (parts[1].equalsIgnoreCase("on")) {
+            timing = true;
+        } else if (parts[1].equalsIgnoreCase("off")) {
+            timing = false;
+        } else {
+            output.println("\\timing: unrecognized value \"" + parts[1] + "\": Boolean expected");
+            return;
+        }
+        output.println(timing ? "Timing is on." : "Timing is off.");
     }
 }

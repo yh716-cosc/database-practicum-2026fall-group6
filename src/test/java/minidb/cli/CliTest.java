@@ -43,6 +43,34 @@ class CliTest {
     }
 
     @Test
+    void createIndexPrintsStatusAndErrorsDoNotStopTheSession() {
+        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        new Cli(new Engine(data)).run(new StringReader(
+                "CREATE INDEX idx_id ON students (missing)\nCREATE INDEX idx_id ON students (id);\n"
+                + "SELECT id FROM students WHERE id = 1\nquit\n"),
+                new PrintStream(buffer, true, StandardCharsets.UTF_8));
+        String text = buffer.toString(StandardCharsets.UTF_8);
+        int error = text.indexOf("Unknown column: students.missing");
+        int created = text.indexOf("Created index idx_id on students(id)");
+        assertTrue(error >= 0 && created > error, text);
+        assertTrue(text.indexOf("(1 rows)") > created, text);
+        assertTrue(Files.exists(data.resolve("students.id.idx")));
+    }
+
+    @Test
+    void showIndexesPrintsATable() {
+        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        new Cli(new Engine(data)).run(new StringReader(
+                "SHOW INDEXES;\nCREATE INDEX idx_id ON students (id)\nSHOW INDEXES\nquit\n"),
+                new PrintStream(buffer, true, StandardCharsets.UTF_8));
+        String text = buffer.toString(StandardCharsets.UTF_8);
+        String nl = System.lineSeparator();
+        assertTrue(text.contains("(0 rows)"), text);
+        assertTrue(text.contains("name | table | column | status" + nl), text);
+        assertTrue(text.contains("idx_id | students | id | fresh" + nl + "(1 rows)"), text);
+    }
+
+    @Test
     void planningErrorDoesNotStopTheNextStatement() {
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
         PrintStream output = new PrintStream(buffer, true, StandardCharsets.UTF_8);
@@ -77,6 +105,55 @@ class CliTest {
             previous = result;
         }
         assertEquals(7, text.split("minidb>", -1).length - 1);
+    }
+
+    @Test
+    void timingOnPrintsElapsedTimeAfterSuccessfulStatementsOnly() {
+        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        PrintStream output = new PrintStream(buffer, true, StandardCharsets.UTF_8);
+        String input = """
+                SELECT id FROM students
+                \\timing on
+                SELECT id FROM students
+                SELECT missing FROM students
+                \\timing off;
+                SELECT id FROM students
+                quit
+                """;
+        new Cli(new Engine(data)).run(new StringReader(input), output);
+
+        String text = buffer.toString(StandardCharsets.UTF_8);
+        int on = text.indexOf("Timing is on.");
+        int off = text.indexOf("Timing is off.");
+        assertTrue(on >= 0 && off > on, text);
+        assertEquals(1, text.split("Time: \\d+\\.\\d{3} ms", -1).length - 1, text);
+        int time = text.indexOf("Time: ");
+        assertTrue(time > text.indexOf("(1 rows)", on) && time < text.indexOf("Unknown column"), text);
+    }
+
+    @Test
+    void metaCommandsToggleAndRejectUnknownInput() {
+        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        PrintStream output = new PrintStream(buffer, true, StandardCharsets.UTF_8);
+        String input = """
+                \\timing
+                \\timing maybe
+                \\TIMING
+                \\foo
+                SELECT id FROM students
+                quit
+                """;
+        new Cli(new Engine(data)).run(new StringReader(input), output);
+
+        String text = buffer.toString(StandardCharsets.UTF_8);
+        int on = text.indexOf("Timing is on.");
+        int bad = text.indexOf("\\timing: unrecognized value \"maybe\": Boolean expected");
+        int off = text.indexOf("Timing is off.");
+        int invalid = text.indexOf("Invalid command \\foo.");
+        assertTrue(on >= 0 && bad > on && off > bad && invalid > off, text);
+        assertTrue(text.indexOf("(1 rows)") > invalid, text);
+        assertTrue(!text.contains("Time: "), text);
+        assertEquals(6, text.split("minidb>", -1).length - 1, text);
     }
 
     @Test

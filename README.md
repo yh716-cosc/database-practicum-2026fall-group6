@@ -2,7 +2,8 @@
 
 A Java 17 database project supporting single-table and two-table INNER/LEFT/RIGHT JOIN queries over
 CSV files with explicit schemas. SQL parsing, planning, scan, filtering, projection,
-and CLI execution are implemented. The CLI is read-only.
+and CLI execution are implemented. The CLI never modifies table data; its only writes
+are `CREATE INDEX` and `DROP INDEX`, which create and delete index files.
 
 ## Quick start
 
@@ -49,7 +50,8 @@ wording is rejected rather than guessed.
 
 Expected results: 11 rows; 6 names (Alice, Carol, O'Brien, alice, Max, Alice);
 ID 4; and ID 6, respectively. The final semicolon is optional.
-Type `quit` or `exit` to leave. Multiline statements and multiple statements on
+Type `quit` or `exit` to leave. Type `\timing` (or `\timing on` / `\timing off`)
+to print `Time: <ms> ms` after each successful statement. Multiline statements and multiple statements on
 one line are not supported by the CLI.
 
 Inspect and refresh table statistics at the same prompt:
@@ -100,10 +102,13 @@ for additional inputs and expected results.
 - Bare column names or actual table qualifiers, such as `students.age`.
 - Case-insensitive SQL keywords; case-sensitive table and column names.
 - Signed 32-bit integers; single-quoted strings with doubled quote escaping.
+- `CREATE INDEX name ON table (column)` on one INTEGER column `DROP INDEX name`,
+  and `SHOW INDEXES`; see [indexes](docs/indexing.md).
 
 No implicit type conversion: `age = '18'` is a planning error.
 FULL/non-equality/multiway joins, column aliases, comma-separated tables, GROUP BY, aggregates, DISTINCT, OFFSET,
-LIKE, standalone NULL literals, arithmetic, comments, subqueries, and SQL writes are unsupported.
+LIKE, standalone NULL literals, arithmetic, comments, subqueries, and SQL writes other than
+CREATE INDEX and DROP INDEX are unsupported.
 NULL values can come from outer joins or versioned nullable CSV storage.
 `table.*` and mixing `*` with other selected columns are also unsupported.
 
@@ -147,6 +152,11 @@ These APIs are also available on `Engine`, sharing its storage cache. See
 [statistics and external edits](docs/storage.md#table-statistics-and-external-edits)
 for cache invalidation rules, including timestamp-preserving external edits.
 
+To speed up WHERE on an INTEGER column, run `CREATE INDEX idx_age ON students (age)`.
+This writes `data/students.age.idx`; queries never create or rebuild index files.
+If the CSV changes, queries ignore the out-of-date index until you run CREATE INDEX
+again. See [B+ tree indexes](docs/indexing.md).
+
 ## Architecture and status
 
 ```text
@@ -163,10 +173,10 @@ SQL -> Parser -> AST -> Planner + Catalog -> Logical plan
 | --- | --- |
 | Parser | Tokenization, SELECT AST, precedence, syntax diagnostics |
 | Planner | Column binding, type checks, star expansion, logical plans |
-| Optimizer | Fold constants, simplify predicates, merge consecutive projections |
+| Optimizer | Fold constants, simplify predicates, merge consecutive projections, choose index scans |
 | Executor | Convert plans into fresh operator trees without reading rows |
 | Operators | Scan, filtering, stable in-memory sorting, streaming limit, projection, cleanup |
-| Storage | Schema/catalog lookup, CSV cursors, new-table writes via Java API |
+| Storage | Schema/catalog lookup, CSV cursors, B+ tree index scans, new-table writes via Java API |
 | Engine / CLI | Execute SQL, collect results, print rows, accept next query |
 
 `Executor.compile()` creates Java operator objects; it does not invoke javac or
@@ -180,7 +190,8 @@ produce bytecode. Engine opens the root, pulls rows, and closes it.
 - Scan/filter/project stream rows, but QueryResult collects all output in memory.
 - Parser nesting is limited to 128 combined parentheses/NOT levels. Planner
   predicate-tree depth is limited to 256, including long flat AND/OR chains.
-- Output includes column headers. No cost-based optimizer, indexes, or transactions.
+- Output includes column headers. No cost-based optimizer or transactions; indexes
+  cover INTEGER columns of single-table WHERE clauses only.
 
 If `java` or `mvn` is not recognized, check JDK/Maven installation and PATH.
 If the JAR is missing, run `mvn -q package`. If a table is missing, check the
@@ -213,6 +224,7 @@ src/main/java/minidb/
   cli/                   interactive command line
   sql/                   tokenizer, parser, AST
   catalog/, storage/     schemas and CSV storage
+  index/                 B+ tree index files
   types/                 INTEGER / STRING values
   plan/                  bound expressions and logical plans
   exec/                  executor, operators, results
@@ -227,6 +239,7 @@ local-test-data/         shared manual-test table and expected results
 - [Filtering architecture and contracts](docs/query-filtering.md)
 - [Storage](docs/storage.md)
 - [Two-table JOIN and implementation reference](docs/join.md)
+- [B+ tree indexes](docs/indexing.md)
 
 ## Next work
 

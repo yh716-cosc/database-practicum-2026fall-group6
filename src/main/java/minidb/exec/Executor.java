@@ -29,6 +29,9 @@ public final class Executor {
         if (plan instanceof LogicalOperator.Scan scan) {
             return new TableScanOperator(store, scan.tableName());
         }
+        if (plan instanceof LogicalOperator.IndexScan scan) {
+            return TableScanOperator.indexScan(store, scan.tableName(), scan.column(), scan.range());
+        }
         if (plan instanceof LogicalOperator.Filter filter) {
             return new FilterOperator(compile(filter.child()), filter.predicate(), new ExpressionEvaluator());
         }

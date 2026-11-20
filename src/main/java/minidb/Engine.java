@@ -10,6 +10,7 @@ import minidb.catalog.DirectoryCatalog;
 import minidb.exec.Executor;
 import minidb.exec.Operator;
 import minidb.exec.QueryResult;
+import minidb.plan.CostBasedOptimizer;
 import minidb.plan.LogicalOperator;
 import minidb.plan.Planner;
 import minidb.plan.Optimizer;
@@ -34,6 +35,7 @@ public final class Engine {
     private final Parser parser;
     private final Planner planner;
     private final Executor executor;
+    private final CostBasedOptimizer costOptimizer;
 
     public Engine(Path dataDir) {
         this.catalog = new DirectoryCatalog(dataDir);
@@ -41,6 +43,7 @@ public final class Engine {
         this.parser = new SqlParser();
         this.planner = new Planner();
         this.executor = new Executor(store);
+        this.costOptimizer = new CostBasedOptimizer(catalog, store);
     }
 
     public QueryResult execute(String sql) {
@@ -67,7 +70,8 @@ public final class Engine {
         }
         LogicalOperator plan = planner.plan(statement, catalog);
         QueryResult result = new QueryResult(columnNames(plan));
-        Operator root = executor.compile(new Optimizer(catalog).optimize(plan));
+        LogicalOperator optimized = new Optimizer(catalog).optimize(plan);
+        Operator root = executor.compile(optimized, costOptimizer.chooseJoin(optimized).orElse(null));
         root.open();
         try {
             Row row;

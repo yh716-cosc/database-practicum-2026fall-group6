@@ -200,6 +200,6 @@ class CliTest {
                 "show id from students return at most 1 rows\nquit\n"), output);
 
         String text = buffer.toString(StandardCharsets.UTF_8);
-        assertTrue(text.contains("1\n(1 rows)"), text);
+        assertTrue(text.replace("\r\n", "\n").contains("1\n(1 rows)"), text);
     }
 }

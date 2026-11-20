@@ -5,24 +5,18 @@ import java.io.Reader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
-import java.util.regex.Pattern;
 
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
 
-import minidb.catalog.Column;
 import minidb.catalog.Table;
 import minidb.catalog.TableDefinition.Format;
-import minidb.types.Value;
 
 /** A single-use scan. Keeps only the parser's buffer and the current record in memory. */
 final class CsvRowCursor implements RowCursor {
-    private static final Pattern INTEGER_PATTERN = Pattern.compile("[+-]?[0-9]+");
-
     private enum State { NEW, OPEN, EOF, CLOSED }
 
     private final Path path;
@@ -49,7 +43,7 @@ final class CsvRowCursor implements RowCursor {
             reader = Files.newBufferedReader(path, StandardCharsets.UTF_8);
             parser = CSVFormat.RFC4180.parse(reader);
             records = parser.iterator();
-            List<String> expected = table.columns().stream().map(Column::name).toList();
+            List<String> expected = CsvRows.header(table);
             if (!records.hasNext() || !records.next().toList().equals(expected)) {
                 throw new StorageException(path + ": expected CSV header " + expected);
             }
@@ -73,47 +67,9 @@ final class CsvRowCursor implements RowCursor {
                 state = State.EOF;
                 return null;
             }
-            CSVRecord record = records.next();
-            String context = path + ", data record " + nextRecord;
-            if (record.size() != table.columns().size()) {
-                throw new StorageException(context + ": expected " + table.columns().size()
-                        + " fields, found " + record.size());
-            }
-            List<Value> values = new ArrayList<>(record.size());
-            for (int i = 0; i < record.size(); i++) {
-                Column column = table.columns().get(i);
-                String text = record.get(i);
-                if (format == Format.NULLABLE_CSV_V1) {
-                    if (text.equals("\\N")) {
-                        values.add(Value.nullValue(column.type()));
-                        continue;
-                    }
-                    if (text.startsWith("\\")) {
-                        if (!text.startsWith("\\\\")) {
-                            throw new StorageException(context + ", column " + column.name()
-                                    + ": invalid nullable CSV escape");
-                        }
-                        text = text.substring(1);
-                    }
-                }
-                Object raw = switch (column.type()) {
-                    case INTEGER -> {
-                        try {
-                            if (!INTEGER_PATTERN.matcher(text).matches()) {
-                                throw new NumberFormatException("Not a decimal integer");
-                            }
-                            yield Integer.valueOf(text);
-                        } catch (NumberFormatException e) {
-                            throw new StorageException(context + ", column " + column.name()
-                                    + ": expected 32-bit INTEGER, found \"" + text + "\"", e);
-                        }
-                    }
-                    case STRING -> text;
-                };
-                values.add(new Value(column.type(), raw));
-            }
+            Row row = CsvRows.toRow(records.next(), table, format, path + ", data record " + nextRecord);
             nextRecord++;
-            return new Row(List.copyOf(values));
+            return row;
         } catch (RuntimeException e) {
             throw fail(path + ", data record " + nextRecord + ": cannot read CSV", e);
         }

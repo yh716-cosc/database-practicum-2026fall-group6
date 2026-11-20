@@ -10,6 +10,56 @@ See [JOIN syntax and semantics](join.md). The statement must consume the whole s
 `docs/query-filtering.md` describes the larger single-table pipeline; this guide
 covers the parser that is implemented now.
 
+The interactive CLI additionally accepts a controlled-English query syntax.
+`minidb.command.EnglishCommandTranslator` translates commands such as
+`show name from students where age is at least 18` into SQL before this parser
+runs. Direct SQL remains supported. The translator is intentionally
+deterministic and rejects wording outside its documented grammar.
+
+It also supports table aliases, one `INNER`/`LEFT`/`RIGHT JOIN` with an equality
+condition, multiple sort keys, and a non-negative row limit. For example:
+
+```text
+show s.name, e.course from students as s inner join enrollments as e
+  on s.id equals e.student_id
+  where s.age is at least 18
+  ordered by e.course descending limited to 10 rows
+```
+
+This becomes:
+
+```sql
+SELECT s.name, e.course
+FROM students AS s INNER JOIN enrollments AS e
+ON s.id = e.student_id
+WHERE s.age >= 18
+ORDER BY e.course DESC
+LIMIT 10;
+```
+
+```text
+english_query := SHOW (ALL | column_list) FROM identifier [WHERE expression]
+expression    := or_expression
+or_expression := and_expression (OR and_expression)*
+```
+
+English comparison phrases map to SQL as follows:
+
+| English phrase | SQL |
+| --- | --- |
+| `equals` / `is equal to` | `=` |
+| `is not equal to` | `<>` |
+| `is less than` | `<` |
+| `is at most` | `<=` |
+| `is greater than` | `>` |
+| `is at least` | `>=` |
+| `is null` / `is not null` | `IS NULL` / `IS NOT NULL` |
+
+English `and`, `or`, `not`, and parentheses have the same precedence as their
+SQL equivalents. Values use the existing signed integer and single-quoted
+string syntax, including doubled quotes inside strings. Table and column
+validation remains the planner's responsibility after translation.
+
 ## Call the parser
 
 ```java

@@ -1,5 +1,8 @@
 package minidb.exec;
 
+import java.util.function.Supplier;
+
+import minidb.index.KeyRange;
 import minidb.storage.Row;
 import minidb.storage.RowCursor;
 import minidb.storage.TableStore;
@@ -8,14 +11,22 @@ import minidb.storage.TableStore;
 public final class TableScanOperator implements Operator {
     private enum State { NEW, OPEN, EOF, CLOSED }
 
-    private final TableStore store;
-    private final String tableName;
+    private final Supplier<RowCursor> cursors;
     private RowCursor cursor;
     private State state = State.NEW;
 
     public TableScanOperator(TableStore store, String tableName) {
-        this.store = store;
-        this.tableName = tableName;
+        this(() -> store.scan(tableName));
+    }
+
+    private TableScanOperator(Supplier<RowCursor> cursors) {
+        this.cursors = cursors;
+    }
+
+    /** Reads only rows whose indexed column is in range, in the same order as a full scan. */
+    public static TableScanOperator indexScan(TableStore store, String tableName, String column,
+            KeyRange range) {
+        return new TableScanOperator(() -> store.indexScan(tableName, column, range));
     }
 
     @Override
@@ -24,7 +35,7 @@ public final class TableScanOperator implements Operator {
             throw new IllegalStateException("A table scan can only be opened once");
         }
         try {
-            cursor = store.scan(tableName);
+            cursor = cursors.get();
             cursor.open();
             state = State.OPEN;
         } catch (RuntimeException failure) {

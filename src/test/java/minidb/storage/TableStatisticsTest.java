@@ -171,4 +171,56 @@ class TableStatisticsTest {
         assertTrue(failure.getMessage().contains("changed during statistics collection"));
         assertEquals(2, new DirectoryTableStore(data).statistics("cells").rowCount());
     }
+
+    @Test void cachedLookupDoesNotCollectAndReusesOnlyAnExistingSnapshot() throws Exception {
+        var store = write(List.of(row(1, "A")));
+        assertTrue(store.cachedStatistics("cells").isEmpty());
+        assertTrue(store.cachedStatistics("missing").isEmpty());
+        var collected = store.statistics("cells");
+        assertSame(collected, store.cachedStatistics("cells").orElseThrow());
+        assertTrue(new DirectoryTableStore(data).cachedStatistics("cells").isEmpty());
+
+        // A cache lookup must not parse even the first data record. This undetectable
+        // edit preserves metadata, so forced analyze is required by the existing contract.
+        Path csv = data.resolve("cells.csv");
+        FileTime modified = Files.getLastModifiedTime(csv);
+        Files.writeString(csv, Files.readString(csv).replace("1,A", "x,A"));
+        Files.setLastModifiedTime(csv, modified);
+        assertSame(collected, store.cachedStatistics("cells").orElseThrow());
+        assertThrows(StorageException.class, () -> store.analyze("cells"));
+        assertTrue(store.cachedStatistics("cells").isEmpty());
+        assertThrows(StorageException.class, () -> store.cachedStatistics("../cells"));
+    }
+
+    @Test void cachedLookupEvictsStaleEntriesWithoutScanningOrRevivingOldSnapshots() throws Exception {
+        var store = write(List.of(row(1, "A")));
+        store.statistics("cells");
+        Path csv = data.resolve("cells.csv");
+        String original = Files.readString(csv);
+        FileTime modified = Files.getLastModifiedTime(csv);
+        Files.writeString(csv, "bad,B\n", StandardOpenOption.APPEND);
+        // Stale metadata invalidates the entry; the bad record is not read here.
+        assertTrue(store.cachedStatistics("cells").isEmpty());
+        assertThrows(StorageException.class, () -> store.statistics("cells"));
+        Files.writeString(csv, original);
+        Files.setLastModifiedTime(csv, modified);
+        assertTrue(store.cachedStatistics("cells").isEmpty());
+        assertEquals(1, store.statistics("cells").rowCount());
+    }
+
+    @Test void cachedLookupEvictsEntriesWhenMetadataIsMissingOrMalformed() throws Exception {
+        var store = write(List.of(row(1, "A")));
+        Path schema = data.resolve("cells.schema");
+        String original = Files.readString(schema);
+        FileTime modified = Files.getLastModifiedTime(schema);
+        store.analyze("cells");
+        Files.writeString(schema, "id UNKNOWN\n");
+        assertTrue(store.cachedStatistics("cells").isEmpty());
+        Files.writeString(schema, original);
+        Files.setLastModifiedTime(schema, modified);
+        assertTrue(store.cachedStatistics("cells").isEmpty());
+        store.analyze("cells");
+        Files.delete(data.resolve("cells.csv"));
+        assertTrue(store.cachedStatistics("cells").isEmpty());
+    }
 }

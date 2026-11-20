@@ -1,5 +1,16 @@
 # Project updates
 
+## 2026-11-13 — Statistics commands and cached-only access
+
+- Add `.stats <table>` and `.analyze <table>` at the CLI prompt, with explicit
+  full-scan/cache messages, row and NULL counts, CSV size, collection time, and
+  distinct counts labeled exact or estimated.
+- Expose statistics operations through Engine, sharing its query storage cache.
+- Add optional cached-only lookup that checks file/schema metadata without reading
+  CSV rows; stale or unavailable entries are evicted without automatic collection.
+- Retain forced refresh for metadata-preserving edits and prompt recovery after
+  malformed commands or failed collection. Ordinary queries do not collect stats.
+
 ## 2026-10-30 — Repair nullable-storage/JOIN merge
 
 - Remove duplicated predicate methods, IsNull records, and malformed test nesting.
@@ -7,6 +18,26 @@
 - Distinguish typed NULL from literal NULL strings while retaining headers and escaping.
 - Make nullable schema/output assertions portable across LF and CRLF platforms.
 - Reconcile supported-query and nullable-storage documentation.
+
+## 2026-10-30 — Unclustered B+ tree indexes
+
+- Add `CREATE INDEX name ON table (column)` for INTEGER columns; the CLI prints
+  `Created index ...` or, for an existing index, `Rebuilt index ...`.
+- Add `DROP INDEX name`, which finds the index file by the name in its header and
+  deletes it. CREATE INDEX now rejects a name used on another column and a second
+  name on an already indexed column.
+- Add `SHOW INDEXES`, which lists each index file's name, table, column, and status
+  (`fresh`, `stale`, or `unreadable`), so forgotten names can be passed to DROP INDEX.
+- Bulk-load page-based B+ tree files (`<table>.<column>.idx`) keyed by column value,
+  with CSV record byte offsets as rids. Only CREATE INDEX builds them; queries ignore
+  an index whose CSV has changed and scan the table instead.
+- Optimizer rewrites `Filter(Scan)` to `Filter(IndexScan)` for `=`, `<`, `<=`, `>`, `>=`
+  conjuncts against literals; the full predicate is still applied.
+- Index scans return rows in file order, so results match full scans exactly.
+- Share CSV record conversion between scans, index builds, and index fetches.
+- See docs/indexing.md for the file format, rules, and limits.
+- Add psql-style `\timing [on|off]` to the CLI; when on, each successful statement
+  is followed by `Time: <ms> ms` (parse, plan, and execution; printing excluded).
 
 ## LEFT and RIGHT JOIN extension
 

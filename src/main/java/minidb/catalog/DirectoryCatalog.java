@@ -7,7 +7,9 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
+import minidb.storage.CsvIndexes;
 import minidb.storage.StorageException;
+import minidb.types.DataType;
 
 /** Metadata from paired <table>.schema and <table>.csv files. Names are case-sensitive. */
 public final class DirectoryCatalog implements Catalog {
@@ -44,5 +46,24 @@ public final class DirectoryCatalog implements Catalog {
             throw new StorageException("Missing table data: " + dataDir.resolve(name + ".csv"));
         }
         return SchemaFiles.readDefinition(dataDir.resolve(name + ".schema"), name);
+    }
+
+    /**
+     * INTEGER columns with an index file from CREATE INDEX that still matches the CSV.
+     * Out-of-date or unreadable index files are ignored, so queries fall back to scans.
+     */
+    @Override
+    public List<String> indexedColumns(String tableName) {
+        Table table = getTable(tableName);
+        Path csv = dataDir.resolve(tableName + ".csv");
+        List<String> indexed = new ArrayList<>();
+        for (int i = 0; i < table.columns().size(); i++) {
+            Column column = table.columns().get(i);
+            if (column.type() == DataType.INTEGER
+                    && CsvIndexes.isFresh(csv, CsvIndexes.indexPath(dataDir, tableName, column.name()), i)) {
+                indexed.add(column.name());
+            }
+        }
+        return List.copyOf(indexed);
     }
 }

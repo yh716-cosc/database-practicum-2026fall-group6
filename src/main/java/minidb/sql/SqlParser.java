@@ -5,16 +5,19 @@ import java.util.List;
 import java.util.Locale;
 
 import minidb.sql.ast.ColumnRef;
+import minidb.sql.ast.CreateIndex;
+import minidb.sql.ast.DropIndex;
 import minidb.sql.ast.Expression;
 import minidb.sql.ast.Query;
 import minidb.sql.ast.SelectItem;
+import minidb.sql.ast.ShowIndexes;
 import minidb.sql.ast.Statement;
 import minidb.sql.ast.TableRef;
 import minidb.sql.ast.OrderBy;
 import minidb.sql.ast.Join;
 
 /**
- * Recursive-descent parser for one SELECT statement. Each {@code parse} call
+ * Recursive-descent parser for one SELECT, CREATE INDEX, DROP INDEX, or SHOW INDEXES statement. Each {@code parse} call
  * uses a fresh tokenizer, so a failure does not affect the next call.
  */
 public final class SqlParser implements Parser {
@@ -23,7 +26,11 @@ public final class SqlParser implements Parser {
 
     @Override
     public Statement parse(String sql) {
-        return new Session(sql).query();
+        Session session = new Session(sql);
+        if (session.word("create")) return session.createIndex();
+        if (session.word("drop")) return session.dropIndex();
+        if (session.word("show")) return session.showIndexes();
+        return session.query();
     }
 
     private static final class Session {
@@ -96,6 +103,58 @@ public final class SqlParser implements Parser {
             }
             return new Query(List.copyOf(select), List.of(table), List.copyOf(joins), where,
                     List.copyOf(orderBy), limit);
+        }
+
+        /** CREATE INDEX name ON table (column) [;] */
+        private CreateIndex createIndex() {
+            advance();
+            if (!word("index")) throw unexpected("INDEX");
+            advance();
+            if (word("on")) throw error("CREATE INDEX requires an index name");
+            String name = expectIdentifier("index name").text();
+            if (!word("on")) throw unexpected("ON");
+            advance();
+            String table = expectIdentifier("table name").text();
+            expect(Token.Kind.LPAREN, "'('");
+            String column = expectIdentifier("column name").text();
+            if (current.kind() == Token.Kind.COMMA) throw error("multi-column indexes are not supported");
+            expect(Token.Kind.RPAREN, "')'");
+            if (current.kind() == Token.Kind.SEMICOLON) {
+                advance();
+            }
+            if (current.kind() != Token.Kind.EOF) {
+                throw unexpected("end of input");
+            }
+            return new CreateIndex(name, table, column);
+        }
+
+        /** DROP INDEX name [;] */
+        private DropIndex dropIndex() {
+            advance();
+            if (!word("index")) throw unexpected("INDEX");
+            advance();
+            String name = expectIdentifier("index name").text();
+            if (current.kind() == Token.Kind.SEMICOLON) {
+                advance();
+            }
+            if (current.kind() != Token.Kind.EOF) {
+                throw unexpected("end of input");
+            }
+            return new DropIndex(name);
+        }
+
+        /** SHOW INDEXES [;] (SHOW INDEX is accepted too) */
+        private ShowIndexes showIndexes() {
+            advance();
+            if (!word("indexes") && !word("index")) throw unexpected("INDEXES");
+            advance();
+            if (current.kind() == Token.Kind.SEMICOLON) {
+                advance();
+            }
+            if (current.kind() != Token.Kind.EOF) {
+                throw unexpected("end of input");
+            }
+            return new ShowIndexes();
         }
 
         private boolean word(String text) {

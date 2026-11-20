@@ -48,6 +48,48 @@ are translated into SQL and then use the same parser, planner, and executor as
 direct SQL input. The English grammar is deliberately strict; unsupported
 wording is rejected rather than guessed.
 
+## Optional LLM English translation
+
+For more natural English, the CLI can use a local Ollama model to produce a structured
+read-only query request. The model never supplies executable SQL: local code
+validates the request and generates SQL before passing it to the normal parser,
+planner, optimizer, and executor. Only table/column metadata and types are sent
+to the model; CSV rows are not sent.
+
+Install Ollama, download a model, and enable the provider before starting the CLI:
+
+```sh
+ollama pull qwen3:4b
+export MINIDB_LLM_ENABLED=true
+java -jar target/minidb-0.1.0.jar local-test-data
+```
+
+The model name defaults to `qwen3:4b` and can be overridden with `OLLAMA_MODEL`.
+The endpoint defaults to `http://localhost:11434/api/chat` and can be overridden
+with `OLLAMA_URL`. Direct SQL and the existing deterministic `show ...` syntax
+remain available. If LLM translation is enabled but Ollama is unavailable, the
+model request, response decoding, or local validation fails, the CLI reports an error and does not
+execute a query.
+
+Example natural-language input:
+
+```text
+Show me the names of students who are at least 18 and have scores above 85.
+```
+
+The LLM must map this to a structured request such as `name`, `students`,
+`age >= 18`, and `score > 85`; SQL generation and database validation remain
+local.
+
+The full HTTP/tool-call/validation/generation path can be tested offline with
+the local fake-endpoint test:
+
+```sh
+mvn -q "-Dtest=OllamaQueryTranslatorTest" test
+```
+
+This simulates an Ollama response and does not require Ollama or a model.
+
 Expected results: 11 rows; 6 names (Alice, Carol, O'Brien, alice, Max, Alice);
 ID 4; and ID 6, respectively. The final semicolon is optional.
 Type `quit` or `exit` to leave. Type `\timing` (or `\timing on` / `\timing off`)

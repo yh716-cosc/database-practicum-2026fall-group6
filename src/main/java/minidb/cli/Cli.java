@@ -8,6 +8,8 @@ import java.util.regex.Pattern;
 import minidb.Engine;
 import minidb.command.EnglishCommandException;
 import minidb.command.EnglishCommandTranslator;
+import minidb.command.OllamaQueryTranslator;
+import minidb.command.QueryRequestException;
 import minidb.exec.QueryResult;
 import minidb.sql.SqlParseException;
 import minidb.plan.PlanningException;
@@ -22,9 +24,13 @@ public final class Cli {
     private final Engine engine;
     private final EnglishCommandTranslator englishTranslator = new EnglishCommandTranslator();
     private boolean timing;
+    private final OllamaQueryTranslator llmTranslator;
+    private final boolean llmEnabled;
 
     public Cli(Engine engine) {
         this.engine = engine;
+        this.llmEnabled = Boolean.parseBoolean(System.getenv("MINIDB_LLM_ENABLED"));
+        this.llmTranslator = new OllamaQueryTranslator(engine.catalog());
     }
 
     public void run() {
@@ -60,7 +66,12 @@ public final class Cli {
                     continue;
                 }
                 long start = System.nanoTime();
-                String sql = isEnglishCommand(line) ? englishTranslator.translate(line) : line;
+                String sql;
+                if (llmEnabled && !isSql(line)) {
+                    sql = llmTranslator.translate(line);
+                } else {
+                    sql = isEnglishCommand(line) ? englishTranslator.translate(line) : line;
+                }
                 QueryResult result = engine.execute(sql);
                 long elapsed = System.nanoTime() - start;
                 result.printTo(output);
@@ -68,7 +79,7 @@ public final class Cli {
                     output.println(String.format(Locale.ROOT, "Time: %.3f ms", elapsed / 1e6));
                 }
             } catch (EnglishCommandException | SqlParseException | PlanningException
-                    | StorageException ex) {
+                    | StorageException | QueryRequestException ex) {
                 output.println(ex.getMessage());
             } catch (UnsupportedOperationException ex) {
                 output.println(ex.getMessage());
@@ -143,5 +154,10 @@ public final class Cli {
             return;
         }
         output.println(timing ? "Timing is on." : "Timing is off.");
+    }
+
+    private static boolean isSql(String input) {
+        return input.regionMatches(true, 0, "select", 0, 6)
+                && (input.length() == 6 || Character.isWhitespace(input.charAt(6)));
     }
 }

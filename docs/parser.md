@@ -16,6 +16,14 @@ The interactive CLI additionally accepts a controlled-English query syntax.
 runs. Direct SQL remains supported. The translator is intentionally
 deterministic and rejects wording outside its documented grammar.
 
+The CLI also has an opt-in local LLM front end controlled by
+`MINIDB_LLM_ENABLED=true`. It uses Ollama's local chat API to produce a
+structured JSON query request, not SQL text. Local validation and SQL generation
+remain mandatory, and only catalog metadata (table names, columns, and types)
+is included in the model prompt. Connection, decoding, or validation failures
+are reported without execution. `OLLAMA_MODEL` defaults to `qwen3:4b` and
+`OLLAMA_URL` defaults to `http://localhost:11434/api/chat`.
+
 It also supports table aliases, one `INNER`/`LEFT`/`RIGHT JOIN` with an equality
 condition, multiple sort keys, and a non-negative row limit. For example:
 

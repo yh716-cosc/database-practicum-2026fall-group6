@@ -46,6 +46,11 @@ public final class Engine {
         this.costOptimizer = new CostBasedOptimizer(catalog, store);
     }
 
+    /** Exposes read-only schema metadata to query front ends. */
+    public Catalog catalog() {
+        return catalog;
+    }
+
     public QueryResult execute(String sql) {
         Statement statement = parser.parse(sql);
         if (statement instanceof CreateIndex create) {

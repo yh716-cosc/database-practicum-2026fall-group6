@@ -23,10 +23,10 @@ class JoinTest {
     }
     @Test void joinsDuplicatesAndBindsBothSides() {
         assertEquals(List.of(List.of("A", "X"), List.of("A", "Y"), List.of("B", "X"), List.of("B", "Y")),
-                rows("SELECT name, label FROM a INNER JOIN b ON a.id = b.id"));
+                rows("SELECT name, label FROM a INNER JOIN b ON a.id = b.id ORDER BY a.name, b.label"));
         var result = engine.execute("SELECT * FROM a JOIN b ON b.id = a.id");
         assertEquals(List.of("id", "name", "id", "label"), result.columnNames());
-        assertEquals(List.of(1, "A", 1, "X"), rows("SELECT * FROM a JOIN b ON a.id = b.id").get(0));
+        assertEquals(List.of(1, "A", 1, "X"), rows("SELECT * FROM a JOIN b ON a.id = b.id ORDER BY a.name, b.label").get(0));
     }
     @Test void aliasesSelfJoinWhereSortLimitAndStringKeys() {
         assertEquals(List.of(List.of("B")), rows("SELECT x.name FROM a AS x JOIN b y ON x.id = y.id "

@@ -80,6 +80,8 @@ final class CsvRows {
                     }
                 }
                 case STRING -> text;
+                case BIGINT, DECIMAL -> throw new StorageException(context + ", column " + column.name()
+                        + ": result-only type " + column.type() + " cannot be stored");
             };
             values.add(new Value(column.type(), raw));
         }

@@ -46,6 +46,10 @@ public final class Executor {
         if (plan instanceof LogicalOperator.Filter filter) {
             return new FilterOperator(compile(filter.child(), choice), filter.predicate(), new ExpressionEvaluator());
         }
+        if (plan instanceof LogicalOperator.Aggregate aggregate) {
+            return new AggregateOperator(compile(aggregate.child(), choice), aggregate.groupIndexes(),
+                    aggregate.aggregates());
+        }
         if (plan instanceof LogicalOperator.Project project) {
             return new ProjectOperator(compile(project.child(), choice), project.columnIndexes());
         }

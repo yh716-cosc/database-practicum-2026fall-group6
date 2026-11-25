@@ -286,6 +286,7 @@ public final class DirectoryTableStore implements TableStore {
                     && (value.isNull() || switch (column.type()) {
                         case INTEGER -> value.raw() instanceof Integer;
                         case STRING -> value.raw() instanceof String;
+                        case BIGINT, DECIMAL -> false;
                     });
             if (!valid) {
                 throw new StorageException(context + ", column " + column.name()

@@ -48,6 +48,12 @@ public final class Optimizer {
             }
             return new LogicalOperator.Sort(child, sort.keys());
         }
+        if (plan instanceof LogicalOperator.Aggregate aggregate) {
+            // Grouping is a boundary: rewrite below it, but never move HAVING filters,
+            // sorts, or projections across it (their indexes refer to the aggregate output).
+            return new LogicalOperator.Aggregate(optimize(aggregate.child()), aggregate.groupIndexes(),
+                    aggregate.aggregates());
+        }
         if (plan instanceof LogicalOperator.Scan || plan instanceof LogicalOperator.IndexScan) {
             return plan;
         }

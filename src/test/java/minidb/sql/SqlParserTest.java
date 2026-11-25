@@ -235,10 +235,11 @@ class SqlParserTest {
         assertRejects("SELECT *, a FROM t", "cannot be mixed");
         assertRejects("SELECT a, * FROM t", "cannot be mixed");
         assertRejects("SELECT DISTINCT a FROM t", "DISTINCT is not supported");
-        assertRejects("SELECT count(a) FROM t", "aggregates are not supported");
+        // Aggregates, GROUP BY, and HAVING are supported (see AggregateParserTest); misplacement is not.
+        assertRejects("SELECT lower(a) FROM t", "unsupported function lower");
         assertRejects("SELECT a FROM t ORDER a", "expected BY");
-        assertRejects("SELECT a FROM t GROUP BY a", "GROUP BY is not supported");
-        assertRejects("SELECT a FROM t HAVING a = 1", "HAVING is not supported");
+        assertRejects("SELECT a FROM t ORDER BY a GROUP BY a", "misplaced GROUP BY");
+        assertRejects("SELECT a FROM t LIMIT 1 HAVING a = 1", "misplaced HAVING");
         assertRejects("SELECT a FROM t LIMIT -1", "LIMIT requires");
         assertRejects("SELECT a FROM t LIMIT 1 OFFSET 1", "OFFSET is not supported");
         assertRejects("SELECT a FROM t FETCH FIRST 1 ROWS ONLY", "FETCH is not supported");

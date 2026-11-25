@@ -18,8 +18,15 @@ public interface Expression {
     record Not(Expression child) implements Expression {}
     record IsNull(Expression operand, boolean negated) implements Expression {}
 
+    /** Aggregate function names, matched case-insensitively in call position. */
+    enum AggregateFunction { COUNT, SUM, AVG, MIN, MAX }
 
+    /**
+     * An aggregate call. The argument is a {@link ColumnRef}, or {@link Star} for COUNT(*).
+     * Allowed in SELECT, HAVING, and ORDER BY; the planner rejects it in WHERE and JOIN ON.
+     */
+    record Aggregate(AggregateFunction function, Expression argument) implements Expression {}
 
-    /** Allowed only as the sole SELECT item; expanded by the planner. */
+    /** The sole SELECT item (expanded by the planner) or the argument of COUNT(*). */
     record Star() implements Expression {}
 }

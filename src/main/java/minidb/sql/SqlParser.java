@@ -17,7 +17,8 @@ import minidb.sql.ast.OrderBy;
 import minidb.sql.ast.Join;
 
 /**
- * Recursive-descent parser for one SELECT, CREATE INDEX, DROP INDEX, or SHOW INDEXES statement. Each {@code parse} call
+ * Recursive-descent parser for one SELECT (with optional GROUP BY/HAVING and aggregate calls),
+ * CREATE INDEX, DROP INDEX, or SHOW INDEXES statement. Each {@code parse} call
  * uses a fresh tokenizer, so a failure does not affect the next call.
  */
 public final class SqlParser implements Parser {
@@ -69,19 +70,42 @@ public final class SqlParser implements Parser {
                 advance();
                 where = predicate();
             }
+            List<ColumnRef> groupBy = new ArrayList<>();
+            if (word("group")) {
+                advance();
+                if (!word("by")) throw unexpected("BY");
+                advance();
+                do {
+                    if (current.kind() == Token.Kind.INTEGER) {
+                        throw error("GROUP BY ordinals are not supported; name the column");
+                    }
+                    if (current.kind() == Token.Kind.IDENTIFIER && peek().kind() == Token.Kind.LPAREN) {
+                        throw error("GROUP BY accepts only column references");
+                    }
+                    groupBy.add(columnRef("GROUP BY column"));
+                    if (current.kind() != Token.Kind.COMMA) break;
+                    advance();
+                } while (true);
+            }
+            Expression having = null;
+            if (word("having")) {
+                advance();
+                having = predicate();
+            }
             List<OrderBy> orderBy = new ArrayList<>();
             if (word("order")) {
                 advance();
                 if (!word("by")) throw unexpected("BY");
                 advance();
                 do {
-                    ColumnRef column = columnRef("ORDER BY column");
+                    Expression key = current.kind() == Token.Kind.IDENTIFIER && peek().kind() == Token.Kind.LPAREN
+                            ? aggregateCall() : columnRef("ORDER BY column");
                     boolean ascending = true;
                     if (word("asc") || word("desc")) {
                         ascending = word("asc");
                         advance();
                     }
-                    orderBy.add(new OrderBy(column, ascending));
+                    orderBy.add(new OrderBy(key, ascending));
                     if (current.kind() != Token.Kind.COMMA) break;
                     advance();
                 } while (true);
@@ -102,7 +126,7 @@ public final class SqlParser implements Parser {
                 throw unexpected("end of input");
             }
             return new Query(List.copyOf(select), List.of(table), List.copyOf(joins), where,
-                    List.copyOf(orderBy), limit);
+                    List.copyOf(groupBy), having, List.copyOf(orderBy), limit);
         }
 
         /** CREATE INDEX name ON table (column) [;] */
@@ -194,11 +218,52 @@ public final class SqlParser implements Parser {
                     && !continuesAsColumn()) {
                 throw error(clauseMessage(current.text()));
             }
+            if (current.kind() == Token.Kind.IDENTIFIER && peek().kind() == Token.Kind.LPAREN) {
+                return new SelectItem(aggregateCall(), null);
+            }
             ColumnRef column = columnRef("column name");
             if (current.kind() == Token.Kind.LPAREN) {
-                throw error("aggregates are not supported");
+                throw error("unsupported function call");
             }
             return new SelectItem(column, null);
+        }
+
+        /**
+         * name ( * | column ): the caller has seen an identifier followed by '('. Only the five
+         * aggregate names are functions; only COUNT accepts *.
+         */
+        private Expression.Aggregate aggregateCall() {
+            Expression.AggregateFunction function = aggregateFunction(current.text());
+            if (function == null) {
+                throw error("unsupported function " + current.text()
+                        + "; supported functions are COUNT, SUM, AVG, MIN, and MAX");
+            }
+            advance();
+            expect(Token.Kind.LPAREN, "'('");
+            Expression argument;
+            if (current.kind() == Token.Kind.STAR) {
+                if (function != Expression.AggregateFunction.COUNT) {
+                    throw error(function + "(*) is not supported; only COUNT accepts *");
+                }
+                advance();
+                argument = new Expression.Star();
+            } else if (word("distinct")) {
+                throw error("DISTINCT aggregates are not supported");
+            } else if (current.kind() == Token.Kind.IDENTIFIER && peek().kind() == Token.Kind.LPAREN) {
+                throw error("nested function calls are not supported");
+            } else if (current.kind() == Token.Kind.IDENTIFIER) {
+                argument = columnRef("column name");
+            } else if (current.kind() == Token.Kind.RPAREN) {
+                throw error(function + " requires one argument");
+            } else {
+                throw error("aggregate argument must be a column"
+                        + (function == Expression.AggregateFunction.COUNT ? " or *" : ""));
+            }
+            if (current.kind() == Token.Kind.COMMA) {
+                throw error(function + " takes exactly one argument");
+            }
+            expect(Token.Kind.RPAREN, "')'");
+            return new Expression.Aggregate(function, argument);
         }
 
         private boolean continuesAsColumn() {
@@ -293,7 +358,8 @@ public final class SqlParser implements Parser {
                 throw error("SQL NULL is not supported");
             }
             if (current.kind() == Token.Kind.IDENTIFIER && peek().kind() == Token.Kind.LPAREN) {
-                throw error("unsupported expression");
+                if (aggregateFunction(current.text()) == null) throw error("unsupported expression");
+                return aggregateCall();
             }
             if (current.kind() == Token.Kind.IDENTIFIER) {
                 return columnRef("column name");
@@ -416,8 +482,8 @@ public final class SqlParser implements Parser {
             case "using" -> "JOIN USING is not supported; use ON";
             case "join", "inner", "left", "right", "outer", "on" ->
                     "unexpected JOIN keyword; expected a two-table INNER/LEFT/RIGHT JOIN with ON";
-            case "group" -> "GROUP BY is not supported";
-            case "having" -> "HAVING is not supported";
+            case "group" -> "misplaced GROUP BY; expected order WHERE, GROUP BY, HAVING, ORDER BY, LIMIT";
+            case "having" -> "misplaced HAVING; expected order WHERE, GROUP BY, HAVING, ORDER BY, LIMIT";
             case "distinct" -> "DISTINCT is not supported";
             case "offset" -> "OFFSET is not supported";
             case "fetch" -> "FETCH is not supported";
@@ -427,6 +493,17 @@ public final class SqlParser implements Parser {
             case "union", "except", "intersect" -> "set operations are not supported";
             case "insert", "update", "delete", "create", "drop", "alter", "into", "values", "set" ->
                     "updates are not supported";
+            default -> null;
+        };
+    }
+
+    private static Expression.AggregateFunction aggregateFunction(String name) {
+        return switch (name.toLowerCase(Locale.ROOT)) {
+            case "count" -> Expression.AggregateFunction.COUNT;
+            case "sum" -> Expression.AggregateFunction.SUM;
+            case "avg" -> Expression.AggregateFunction.AVG;
+            case "min" -> Expression.AggregateFunction.MIN;
+            case "max" -> Expression.AggregateFunction.MAX;
             default -> null;
         };
     }

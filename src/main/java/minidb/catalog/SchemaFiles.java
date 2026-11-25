@@ -40,6 +40,10 @@ public final class SchemaFiles {
             if (column == null || column.type() == null) {
                 throw new StorageException("Every column must have a name and type");
             }
+            if (!column.type().isStorable()) {
+                throw new StorageException("Column " + column.name() + " has result-only type "
+                        + column.type() + " (use INTEGER or STRING)");
+            }
             validateName(column.name());
             if (!names.add(column.name())) {
                 throw new StorageException("Duplicate column: " + column.name());
@@ -77,7 +81,9 @@ public final class SchemaFiles {
                     throw new StorageException(path + ", line " + lineNumber + ": expected columnName TYPE");
                 }
                 try {
-                    columns.add(new Column(parts[0], DataType.valueOf(parts[1])));
+                    DataType type = DataType.valueOf(parts[1]);
+                    if (!type.isStorable()) throw new IllegalArgumentException("Result-only type");
+                    columns.add(new Column(parts[0], type));
                 } catch (IllegalArgumentException e) {
                     throw new StorageException(path + ", line " + lineNumber
                             + ": unsupported type " + parts[1] + " (use INTEGER or STRING)", e);

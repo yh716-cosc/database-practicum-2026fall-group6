@@ -122,6 +122,11 @@ public final class Engine {
         if (plan instanceof LogicalOperator.Filter filter) {
             return columnNames(filter.child());
         }
+        if (plan instanceof LogicalOperator.Aggregate aggregate) {
+            List<String> input = columnNames(aggregate.child());
+            return java.util.stream.Stream.concat(aggregate.groupIndexes().stream().map(input::get),
+                    aggregate.aggregates().stream().map(LogicalOperator.AggregateCall::label)).toList();
+        }
         if (plan instanceof LogicalOperator.Project project) {
             List<String> input = columnNames(project.child());
             return project.columnIndexes().stream().map(input::get).toList();

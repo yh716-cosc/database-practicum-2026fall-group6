@@ -43,13 +43,13 @@ public final class ExpressionEvaluator {
         if (predicate instanceof BoundExpression.Comparison comparison) {
             Value left = evaluate(comparison.left(), row);
             Value right = evaluate(comparison.right(), row);
-            if (left.type() != right.type()) {
+            if (left.type() != right.type() && !(left.type().isNumeric() && right.type().isNumeric())) {
                 throw new IllegalArgumentException("Comparison requires matching types: "
                         + left.type() + " and " + right.type());
             }
             if (left.isNull() || right.isNull()) return TruthValue.UNKNOWN;
-            if (left.type() == DataType.INTEGER) {
-                int order = Integer.compare((Integer) left.raw(), (Integer) right.raw());
+            if (left.type().isNumeric()) {
+                int order = NumericValues.compare(left, right);
                 return TruthValue.of(switch (comparison.op()) {
                     case EQ -> order == 0;
                     case NE -> order != 0;

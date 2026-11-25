@@ -146,9 +146,13 @@ for additional inputs and expected results.
 - Signed 32-bit integers; single-quoted strings with doubled quote escaping.
 - `CREATE INDEX name ON table (column)` on one INTEGER column `DROP INDEX name`,
   and `SHOW INDEXES`; see [indexes](docs/indexing.md).
+- Aggregates `COUNT(*)`, `COUNT(column)`, `SUM`, `AVG`, `MIN`, `MAX`, with optional
+  `GROUP BY` columns and `HAVING`, after a scan or JOIN. ORDER BY may use group keys or
+  aggregates. COUNT/SUM return BIGINT, AVG returns DECIMAL with 6 digits (HALF_EVEN).
+  See [aggregation](docs/aggregation.md).
 
 No implicit type conversion: `age = '18'` is a planning error.
-FULL/non-equality/multiway joins, column aliases, comma-separated tables, GROUP BY, aggregates, DISTINCT, OFFSET,
+FULL/non-equality/multiway joins, column aliases, comma-separated tables, DISTINCT (including DISTINCT aggregates), OFFSET,
 LIKE, standalone NULL literals, arithmetic, comments, subqueries, and SQL writes other than
 CREATE INDEX and DROP INDEX are unsupported.
 NULL values can come from outer joins or versioned nullable CSV storage.
@@ -217,7 +221,7 @@ SQL -> Parser -> AST -> Planner + Catalog -> Logical plan
 | Planner | Column binding, type checks, star expansion, logical plans |
 | Optimizer | Fold constants, simplify predicates, merge consecutive projections, choose index scans |
 | Executor | Convert plans into fresh operator trees without reading rows |
-| Operators | Scan, filtering, stable in-memory sorting, streaming limit, projection, cleanup |
+| Operators | Scan, filtering, hash aggregation, stable in-memory sorting, streaming limit, projection, cleanup |
 | Storage | Schema/catalog lookup, CSV cursors, B+ tree index scans, new-table writes via Java API |
 | Engine / CLI | Execute SQL, collect results, print rows, accept next query |
 
@@ -230,6 +234,9 @@ produce bytecode. Engine opens the root, pulls rows, and closes it.
 - Missing files, bad headers, invalid CSV values, and I/O errors raise
   `StorageException`; the CLI displays the error and accepts the next query.
 - Scan/filter/project stream rows, but QueryResult collects all output in memory.
+  Aggregation and sorting are blocking; aggregation keeps per-group state, not rows.
+- A SUM result outside BIGINT range raises `QueryExecutionException`; the CLI prints
+  it and accepts the next query.
 - Parser nesting is limited to 128 combined parentheses/NOT levels. Planner
   predicate-tree depth is limited to 256, including long flat AND/OR chains.
 - Output includes column headers. No cost-based optimizer or transactions; indexes
@@ -267,7 +274,7 @@ src/main/java/minidb/
   sql/                   tokenizer, parser, AST
   catalog/, storage/     schemas and CSV storage
   index/                 B+ tree index files
-  types/                 INTEGER / STRING values
+  types/                 INTEGER / STRING values; BIGINT / DECIMAL aggregate results
   plan/                  bound expressions and logical plans
   exec/                  executor, operators, results
 src/test/java/minidb/     automated tests
@@ -282,13 +289,14 @@ local-test-data/         shared manual-test table and expected results
 - [Storage](docs/storage.md)
 - [Two-table JOIN and implementation reference](docs/join.md)
 - [B+ tree indexes](docs/indexing.md)
+- [Aggregation and GROUP BY](docs/aggregation.md)
 
 ## Next work
 
 Consider temporary row storage for external sorting and streaming result output
 for large queries. Cached statistics are available for future planning tools;
-the current optimizer does not use them. Design aggregation according to course
-requirements before extending the current subset.
+the current optimizer does not use them. Aggregation is implemented; English/LLM
+translation of aggregate questions and costing aggregate inputs remain separate work.
 
 ## Group
 

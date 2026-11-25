@@ -1,5 +1,22 @@
 # Project updates
 
+## 2026-11-25 — Aggregation and GROUP BY (Task 3)
+
+- Parse `COUNT(*)`, `COUNT(column)`, `SUM`, `AVG`, `MIN`, `MAX` in SELECT, HAVING, and
+  ORDER BY; add `GROUP BY` columns and `HAVING` between WHERE and ORDER BY. Aggregate
+  names are functions only in call position.
+- Plan aggregate queries as Scan/JOIN -> WHERE -> Aggregate -> HAVING -> Sort -> Limit
+  -> Project. Reject ungrouped columns, aggregates in WHERE/ON, SUM/AVG over STRING,
+  and HAVING without grouping. Equivalent calls share one slot; HAVING/ORDER BY-only
+  aggregates are hidden from output.
+- Add `AggregateOperator` (blocking hash aggregation with per-group accumulators),
+  result-only `BIGINT`/`DECIMAL` types, exact sums with BIGINT overflow errors, and AVG
+  at 6 digits HALF_EVEN. Storage rejects result-only types.
+- HAVING compares INTEGER/BIGINT/DECIMAL exactly; sorting supports the new types.
+- Optimizer and cost-based join choice recurse through the aggregate boundary.
+- Add docs/aggregation.md, a two-table demo fixture in `local-test-data/aggregation`,
+  and 54 tests.
+
 ## 2026-11-13 — Statistics commands and cached-only access
 
 - Add `.stats <table>` and `.analyze <table>` at the CLI prompt, with explicit

@@ -10,6 +10,7 @@ import minidb.command.EnglishCommandException;
 import minidb.command.EnglishCommandTranslator;
 import minidb.command.OllamaQueryTranslator;
 import minidb.command.QueryRequestException;
+import minidb.exec.QueryExecutionException;
 import minidb.exec.QueryResult;
 import minidb.sql.SqlParseException;
 import minidb.plan.PlanningException;
@@ -79,7 +80,7 @@ public final class Cli {
                     output.println(String.format(Locale.ROOT, "Time: %.3f ms", elapsed / 1e6));
                 }
             } catch (EnglishCommandException | SqlParseException | PlanningException
-                    | StorageException | QueryRequestException ex) {
+                    | StorageException | QueryRequestException | QueryExecutionException ex) {
                 output.println(ex.getMessage());
             } catch (UnsupportedOperationException ex) {
                 output.println(ex.getMessage());

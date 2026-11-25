@@ -1,0 +1,3 @@
+# minidb-format nullable-csv-v1
+dept STRING
+points INTEGER

@@ -34,6 +34,9 @@ public final class CostBasedOptimizer {
                 plan = filter.child();
             } else if (plan instanceof LogicalOperator.Sort sort) {
                 plan = sort.child();
+            } else if (plan instanceof LogicalOperator.Aggregate aggregate) {
+                // Aggregate values do not depend on join row order.
+                plan = aggregate.child();
             } else {
                 break;
             }

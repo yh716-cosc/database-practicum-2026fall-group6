@@ -71,6 +71,7 @@ public final class QueryResult {
                 return "'" + display(text.replace("'", "''")) + "'";
             }
         }
+        if (value.raw() instanceof java.math.BigDecimal decimal) return decimal.toPlainString();
         return display(String.valueOf(value.raw()));
     }
 

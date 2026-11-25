@@ -173,8 +173,9 @@ offset is not printed in the message. A tab counts as one column. Line breaks ar
 `\r\n`, or a bare `\r`.
 
 Rejected forms include FULL/CROSS/NATURAL/multiway joins, JOIN USING, column aliases, comma joins, `table.*`, `*` mixed
-with other select items, `GROUP BY`, `HAVING`, `DISTINCT`,
-aggregates, `OFFSET`, `LIKE`, standalone `NULL` literals, quoted identifiers, comments,
+with other select items, misplaced `GROUP BY`/`HAVING`, `DISTINCT` (including
+`COUNT(DISTINCT x)`), functions other than the five aggregates, `SUM(*)` and other
+non-COUNT star arguments, nested calls, GROUP BY ordinals, `OFFSET`, `LIKE`, standalone `NULL` literals, quoted identifiers, comments,
 Rejected forms include JOIN, aliases, more than one table, `table.*`, `*` mixed
 with other select items, `ORDER BY`, `GROUP BY`, `HAVING`, `DISTINCT`,
 aggregates, `LIMIT`, `LIKE`, standalone NULL literals, quoted identifiers, comments,
